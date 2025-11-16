@@ -8,10 +8,16 @@ export default function ArenaRoom() {
   const [agents, setAgents] = useState<any[]>([])
   const [arena, setArena] = useState<any | null>(null)
   const [myAgent, setMyAgent] = useState('')
-  const [status, setStatus] = useState('')
+  const [toasts, setToasts] = useState<{ id: string; text: string; kind: 'success'|'error'|'info' }[]>([])
   const [match, setMatch] = useState<any | null>(null)
   const [packs, setPacks] = useState<any[]>([])
   const pollingRef = useRef<any>(null)
+
+  function pushToast(text: string, kind: 'success'|'error'|'info' = 'info') {
+    const tid = `${Date.now()}-${Math.random()}`
+    setToasts(t => [...t, { id: tid, text, kind }])
+    setTimeout(() => { setToasts(t => t.filter(x => x.id !== tid)) }, 4000)
+  }
 
   useEffect(() => {
     const acc = typeof window !== 'undefined' ? sessionStorage.getItem('accountId') : null
@@ -98,11 +104,11 @@ export default function ArenaRoom() {
           await cancelArena(arena.id)
           const a = await getArenaById(id as string)
           setArena(a)
-          setStatus('Waktu habis. Arena dibatalkan')
+          pushToast('Waktu habis. Arena dibatalkan', 'error')
           return
         }
       } catch (e: any) {
-        setStatus(e?.message || 'Gagal membatalkan arena')
+        pushToast(e?.message || 'Gagal membatalkan arena', 'error')
       }
     })()
   }, [timeLeft, arena?.status, arena?.creator_knowledge_submitted, arena?.joiner_knowledge_submitted, id])
@@ -126,7 +132,7 @@ export default function ArenaRoom() {
       const a = await getArenaById(id)
       setArena(a)
     } catch (e: any) {
-      setStatus(e?.message || 'Join failed')
+      pushToast(e?.message || 'Join failed', 'error')
     }
   }
 
@@ -153,7 +159,7 @@ export default function ArenaRoom() {
         window.location.href = `/arena/${id}/debateroom`
       }
     } catch (e: any) {
-      setStatus(e?.message || 'Failed to start')
+      pushToast(e?.message || 'Failed to start', 'error')
     }
   }
 
@@ -165,7 +171,7 @@ export default function ArenaRoom() {
           <div className="flex items-center gap-2 text-sm text-brand-brown/60">
             <span>Code <span className="font-mono">{arena?.code || '-'}</span></span>
             {arena?.code && (
-              <button className="btn-ghost btn-sm btn-compact" onClick={async ()=>{ try { await navigator.clipboard.writeText(String(arena.code)) } catch {}; setStatus('Code copied') }}>
+              <button className="btn-ghost btn-sm btn-compact" onClick={async ()=>{ try { await navigator.clipboard.writeText(String(arena.code)) } catch {}; pushToast('Code copied', 'success') }}>
                 Copy
               </button>
             )}
@@ -178,7 +184,16 @@ export default function ArenaRoom() {
           </div>
         )}
       </div>
-      {status && <div className={`text-sm ${/berhasil|sukses/i.test(status) ? 'text-green-600' : 'text-red-600'}`}>{status}</div>}
+      <div className="toast-stack">
+        {toasts.map(t => (
+          <div key={t.id} className={t.kind==='success' ? 'toast-success' : t.kind==='error' ? 'toast-error' : 'toast'}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm">{t.text}</div>
+              <button className="btn-ghost btn-sm" onClick={()=> setToasts(ts => ts.filter(x => x.id !== t.id))}>Close</button>
+            </div>
+          </div>
+        ))}
+      </div>
       {!arena ? (
         <div>Loading...</div>
       ) : (
@@ -315,13 +330,13 @@ export default function ArenaRoom() {
                           setChallengeAgentName('')
                           const a = await getArenaById(id as string)
                           setArena(a)
-                          setStatus('Submit berhasil')
+                          pushToast('Submit berhasil', 'success')
                         } else {
                           const msg = (u && u.error) ? (typeof u.error === 'string' ? u.error : 'Submit gagal') : 'Submit gagal'
-                          setStatus(msg)
+                          pushToast(msg, 'error')
                         }
                       } catch (e: any) {
-                        setStatus(e?.message || 'Submit gagal')
+                        pushToast(e?.message || 'Submit gagal', 'error')
                       }
                     }}>Submit</button>
                   </div>
