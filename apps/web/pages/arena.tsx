@@ -9,8 +9,9 @@ export default function Arena() {
   const [modal, setModal] = useState<null | { type: 'create' | 'join' }>(null)
   const [createdId, setCreatedId] = useState('')
   const [inputId, setInputId] = useState('')
-  const [joinStep, setJoinStep] = useState<'enter'|'choose'|'error'>('enter')
+  const [joinStep, setJoinStep] = useState<'enter'|'choose'|'error'|'already'>('enter')
   const [joinArenaMeta, setJoinArenaMeta] = useState<any | null>(null)
+  const [joinRole, setJoinRole] = useState('')
   const [arena, setArena] = useState<any | null>(null)
   const [match, setMatch] = useState<any | null>(null)
   const [recent, setRecent] = useState<any[]>([])
@@ -168,8 +169,18 @@ export default function Arena() {
                         if (!code) return
                         const found = await getArenaByCode(code)
                         if (found && !found.error && found.id) {
+                          const acc = sessionStorage.getItem('accountId') || ''
+                          const p1 = (found.player1_account_id && found.player1_account_id === acc) || (found.creator_account_id && found.creator_account_id === acc)
+                          const p2 = (found.player2_account_id && found.player2_account_id === acc) || (found.joiner_account_id && found.joiner_account_id === acc)
+                          const watchers = Array.isArray(found.watcher_account_ids) ? found.watcher_account_ids : []
+                          const w = watchers.includes(acc)
                           setJoinArenaMeta(found)
-                          setJoinStep('choose')
+                          if (p1 || p2 || w) {
+                            setJoinRole(p1 ? 'Player 1' : (p2 ? 'Player 2' : 'Watcher'))
+                            setJoinStep('already')
+                          } else {
+                            setJoinStep('choose')
+                          }
                         } else {
                           setJoinStep('error')
                         }
@@ -184,6 +195,19 @@ export default function Arena() {
                     <div className="flex gap-2 justify-end">
                       <button className="btn-secondary" onClick={()=> setJoinStep('enter')}>Back</button>
                       <button className="btn-outline" onClick={()=> setModal(null)}>Close</button>
+                    </div>
+                  </>
+                )}
+                {joinStep === 'already' && joinArenaMeta && (
+                  <>
+                    <div className="font-semibold">Kamu sudah terdaftar</div>
+                    <div className="text-sm text-brand-brown/60">Peran: {joinRole}. Ingin membuka room sekarang?</div>
+                    <div className="flex gap-2 justify-end">
+                      <button className="btn-outline" onClick={()=> setModal(null)}>Close</button>
+                      <button className="btn-primary" onClick={() => {
+                        setModal(null)
+                        if (typeof window !== 'undefined') window.location.href = `/arena/${joinArenaMeta.id}`
+                      }}>Open Room</button>
                     </div>
                   </>
                 )}
