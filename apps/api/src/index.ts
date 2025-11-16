@@ -257,6 +257,17 @@ app.get('/arenas', async (req: Request, res: Response) => {
   }
 })
 
+app.get('/arenas/watchers', async (req: Request, res: Response) => {
+  try {
+    const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined
+    if (!accountId) return res.status(400).json({ error: 'Missing accountId' })
+    const list = await db.listWatchArenas(accountId)
+    res.json(list)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
 app.post('/arenas/join', async (req: Request, res: Response) => {
   try {
     const byIdSchema = z.object({ id: z.string(), joinerAccountId: z.string() })

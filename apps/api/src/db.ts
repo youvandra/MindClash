@@ -362,8 +362,16 @@ export const db = {
   , updateArenaById: async (arenaId: string, values: any): Promise<any | undefined> => {
     if (supabase) {
       const { data, error } = await supabase.from('arenas').update(values).eq('id', arenaId).select().single()
-      if (error) return undefined
-      return data
+      if (!error) return data
+      const msg = (error as any)?.message || ''
+      if (msg.includes('relation') && msg.includes('does not exist')) {
+        const a = [...memory.arenas.values()].find((x: any) => x.id === arenaId)
+        if (!a) return undefined
+        const u = { ...a, ...values }
+        memory.arenas.set(u.code || arenaId, u)
+        return u
+      }
+      return undefined
     }
     const a = [...memory.arenas.values()].find((x: any) => x.id === arenaId)
     if (!a) return undefined
@@ -389,6 +397,19 @@ export const db = {
     }
     const arr = [...memory.arenas.values()]
     return accountId ? arr.filter(a => a.creator_account_id === accountId || a.joiner_account_id === accountId) : arr
+  }
+  , listWatchArenas: async (accountId: string): Promise<any[]> => {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('arenas')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      const acc = String(accountId || '').trim()
+      return (data || []).filter((d: any) => Array.isArray(d.watcher_account_ids) && d.watcher_account_ids.some((w: any) => String(w).trim() === acc))
+    }
+    const arr = [...memory.arenas.values()]
+    return arr.filter(a => Array.isArray(a.watcher_account_ids) && a.watcher_account_ids.includes(accountId))
   }
   , deleteArenaById: async (arenaId: string): Promise<boolean> => {
     if (supabase) {

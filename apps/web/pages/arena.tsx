@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { listAgents, listMatches, createArena, getArenaById, getArenaByCode, joinArenaByCode, startArena, setArenaReady, listArenas, deleteArena, watchArena } from '../lib/api'
+import { listAgents, listMatches, createArena, getArenaById, getArenaByCode, joinArenaByCode, startArena, setArenaReady, listArenas, deleteArena, watchArena, listWatchArenas } from '../lib/api'
 
 export default function Arena() {
   const [agents, setAgents] = useState<any[]>([])
@@ -16,18 +16,29 @@ export default function Arena() {
   const [match, setMatch] = useState<any | null>(null)
   const [recent, setRecent] = useState<any[]>([])
   const [myArenas, setMyArenas] = useState<any[]>([])
+  const [watchArenas, setWatchArenas] = useState<any[]>([])
   const pollingRef = useRef<any>(null)
   const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
 
   useEffect(() => {
-    const acc = typeof window !== 'undefined' ? sessionStorage.getItem('accountId') : null
+    const accRaw = typeof window !== 'undefined' ? sessionStorage.getItem('accountId') : null
+    const acc = accRaw ? accRaw.trim() : null
     if (!acc) {
       window.location.href = '/'
       return
     }
     listAgents().then(setAgents)
     listMatches().then(setRecent)
-    listArenas(acc).then(setMyArenas)
+    listArenas(acc || undefined).then(setMyArenas)
+    if (acc) {
+      listWatchArenas(acc).then(async d => {
+        const arr = Array.isArray(d) ? d : []
+        if (arr.length > 0) { setWatchArenas(arr); return }
+        const all = await listArenas(undefined)
+        const fallback = Array.isArray(all) ? all.filter((a: any) => Array.isArray(a.watcher_account_ids) && a.watcher_account_ids.some((w: any) => String(w).trim() === acc)) : []
+        setWatchArenas(fallback)
+      })
+    }
     return () => { if (pollingRef.current) clearInterval(pollingRef.current) }
   }, [])
 
@@ -43,7 +54,7 @@ export default function Arena() {
         <div className="grid grid-cols-1 gap-3">
           {myArenas.map((a: any) => {
             const statusText = String(a.status||'').toLowerCase()
-          const statusColor = statusText === 'completed' ? 'bg-green-100 text-green-800' : statusText === 'cancelled' ? 'bg-red-100 text-red-800' : statusText === 'matching' ? 'bg-blue-100 text-blue-800' : statusText === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
+            const statusColor = statusText === 'completed' ? 'bg-green-100 text-green-800' : statusText === 'cancelled' ? 'bg-red-100 text-red-800' : statusText === 'matching' ? 'bg-blue-100 text-blue-800' : statusText === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
             const isCreator = a.creator_account_id === accId
             const isJoiner = a.joiner_account_id === accId
             const titleText = (String(a.topic||'').length > 60) ? (String(a.topic||'').slice(0, 60) + '…') : String(a.topic||'')
@@ -90,6 +101,39 @@ export default function Arena() {
             )
           })}
         </div>
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-xl font-semibold">(Watch-only) Arena</h3>
+        {watchArenas.length === 0 ? (
+          <div className="text-sm text-brand-brown/60">Belum ada arena yang kamu tonton.</div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {(Array.isArray(watchArenas) ? watchArenas : []).map((a: any) => {
+              const statusText = String(a.status||'').toLowerCase()
+              const statusColor = statusText === 'completed' ? 'bg-green-100 text-green-800' : statusText === 'cancelled' ? 'bg-red-100 text-red-800' : statusText === 'matching' ? 'bg-blue-100 text-blue-800' : statusText === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
+              const titleText = (String(a.topic||'').length > 60) ? (String(a.topic||'').slice(0, 60) + '…') : String(a.topic||'')
+              return (
+                <div key={a.id} className="card p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <a href={`/arena/${a.id}`} className="block">
+                        <div className="text-sm text-brand-brown/60">Code <span className="font-mono">{a.code || '-'}</span></div>
+                        <div className="text-lg font-semibold" title={a.topic}>{titleText}</div>
+                      </a>
+                      <div className="flex items-center gap-2">
+                        <span className="badge bg-white border text-brand-brown/80">{a.game_type === 'challenge' ? 'Challenge' : 'Import'}</span>
+                        <span className={`badge ${statusColor}`}>{a.status}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <a className="btn-outline" href={`/arena/${a.id}`}>Open</a>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
       {match && (
         <div className="space-y-3">
@@ -169,7 +213,7 @@ export default function Arena() {
                         if (!code) return
                         const found = await getArenaByCode(code)
                         if (found && !found.error && found.id) {
-                          const acc = sessionStorage.getItem('accountId') || ''
+                          const acc = (sessionStorage.getItem('accountId') || '').trim()
                           const p1 = (found.player1_account_id && found.player1_account_id === acc) || (found.creator_account_id && found.creator_account_id === acc)
                           const p2 = (found.player2_account_id && found.player2_account_id === acc) || (found.joiner_account_id && found.joiner_account_id === acc)
                           const watchers = Array.isArray(found.watcher_account_ids) ? found.watcher_account_ids : []
@@ -221,21 +265,40 @@ export default function Arena() {
                     <div className="flex gap-2 justify-end">
                       <button className="btn-outline" onClick={()=> setModal(null)}>Cancel</button>
                       <button className="btn-secondary" onClick={async () => {
-                        const acc = sessionStorage.getItem('accountId') || ''
+                        const acc = (sessionStorage.getItem('accountId') || '').trim()
                         const joined = await joinArenaByCode(joinArenaMeta.code, acc)
                         if (joined && joined.id && !joined.error) {
                           setModal(null)
                           if (typeof window !== 'undefined') window.location.href = `/arena/${joined.id}`
                         } else {
                           alert('Room penuh atau tidak tersedia. Membuka sebagai watcher.')
+                          try {
+                            await watchArena(joinArenaMeta.id, acc)
+                            const updated = await listWatchArenas(acc)
+                            const arr = Array.isArray(updated) ? updated : []
+                            if (arr.length > 0) setWatchArenas(arr)
+                            else {
+                              const all = await listArenas(undefined)
+                              const fallback = Array.isArray(all) ? all.filter((a: any) => Array.isArray(a.watcher_account_ids) && a.watcher_account_ids.some((w: any) => String(w).trim() === acc)) : []
+                              setWatchArenas(fallback)
+                            }
+                          } catch {}
                           setModal(null)
                           if (typeof window !== 'undefined') window.location.href = `/arena/${joinArenaMeta.id}`
                         }
                       }}>Join as Player</button>
                       <button className="btn-primary" onClick={async () => {
-                        const acc = sessionStorage.getItem('accountId') || ''
+                        const acc = (sessionStorage.getItem('accountId') || '').trim()
                         try {
                           await watchArena(joinArenaMeta.id, acc)
+                          const updated = await listWatchArenas(acc)
+                          const arr = Array.isArray(updated) ? updated : []
+                          if (arr.length > 0) setWatchArenas(arr)
+                          else {
+                            const all = await listArenas(undefined)
+                            const fallback = Array.isArray(all) ? all.filter((a: any) => Array.isArray(a.watcher_account_ids) && a.watcher_account_ids.some((w: any) => String(w).trim() === acc)) : []
+                            setWatchArenas(fallback)
+                          }
                         } catch {}
                         setModal(null)
                         if (typeof window !== 'undefined') window.location.href = `/arena/${joinArenaMeta.id}`

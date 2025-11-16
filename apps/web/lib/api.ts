@@ -172,6 +172,12 @@ export async function listArenas(accountId?: string) {
   return r.json()
 }
 
+export async function listWatchArenas(accountId: string) {
+  const url = `${API_URL}/arenas/watchers?accountId=${encodeURIComponent(accountId)}`
+  const r = await fetch(url)
+  return r.json()
+}
+
 export async function submitArenaKnowledge(id: string, side: 'pros'|'cons', accountId: string, agentName: string, content: string) {
   const r = await fetch(`${API_URL}/arenas/submit-knowledge`, {
     method: 'POST',
