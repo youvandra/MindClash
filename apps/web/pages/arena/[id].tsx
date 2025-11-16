@@ -68,6 +68,10 @@ export default function ArenaRoom() {
   const oppAgentId = mySide === 'pros' ? arena?.agent_b_id : (mySide === 'cons' ? arena?.agent_a_id : undefined)
   const myDraftText = isCreator ? arena?.creator_draft_text : (isJoiner ? arena?.joiner_draft_text : '')
   const oppDraftText = isCreator ? arena?.joiner_draft_text : arena?.creator_draft_text
+  const p1Ready = !!arena?.creator_ready
+  const p2Ready = !!arena?.joiner_ready
+  const p1Submitted = !!arena?.creator_knowledge_submitted
+  const p2Submitted = !!arena?.joiner_knowledge_submitted
   const MIN_WORDS = 50
   const countWords = (txt?: string) => String(txt||'').trim().split(/\s+/).filter(Boolean).length
   const isTextSufficient = (txt?: string) => countWords(txt) >= MIN_WORDS
@@ -316,32 +320,32 @@ export default function ArenaRoom() {
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="card p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold">You</div>
-                  <span className={`badge ${youReady ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{youReady ? 'Ready' : 'Not ready'}</span>
+                  <div className="font-semibold">{`Player 1${isCreator ? '(You)' : ''}`}</div>
+                  <span className={`badge ${p1Ready ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{p1Ready ? 'Ready' : 'Not ready'}</span>
                 </div>
-                <div className="text-xs text-brand-brown/60 font-mono truncate">{(isCreator || isJoiner) ? (isCreator ? (arena.creator_account_id || '-') : (arena.joiner_account_id || '-')) : '-'}</div>
+                <div className="text-xs text-brand-brown/60 font-mono truncate">{arena.creator_account_id || '-'}</div>
                 <div className="flex items-center gap-2">
                   <div className="text-sm text-brand-brown/60">Side</div>
-                  <span className={`badge ${mySide==='pros' ? 'bg-green-100 text-green-800' : mySide==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>{mySide || '-'}</span>
+                  <span className={`badge ${arena.creator_side==='pros' ? 'bg-green-100 text-green-800' : arena.creator_side==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>{arena.creator_side || '-'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-sm text-brand-brown/60">Submitted</div>
-                  <span className="badge bg-white border text-brand-brown/80">{youSubmitted ? '✅' : '❌'}</span>
+                  <span className="badge bg-white border text-brand-brown/80">{p1Submitted ? '✅' : '❌'}</span>
                 </div>
               </div>
               <div className="card p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold">Opponent</div>
-                  <span className={`badge ${oppReady ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{oppReady ? 'Ready' : 'Not ready'}</span>
+                  <div className="font-semibold">{`Player 2${isJoiner ? '(You)' : ''}`}</div>
+                  <span className={`badge ${p2Ready ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{p2Ready ? 'Ready' : 'Not ready'}</span>
                 </div>
-                <div className="text-xs text-brand-brown/60 font-mono truncate">{isCreator ? (arena.joiner_account_id || '-') : (arena.creator_account_id || '-')}</div>
+                <div className="text-xs text-brand-brown/60 font-mono truncate">{arena.joiner_account_id || '-'}</div>
                 <div className="flex items-center gap-2">
                   <div className="text-sm text-brand-brown/60">Side</div>
-                  <span className={`badge ${(isCreator ? arena.joiner_side : arena.creator_side)==='pros' ? 'bg-green-100 text-green-800' : (isCreator ? arena.joiner_side : arena.creator_side)==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>{(isCreator ? (arena.joiner_side || '-') : (arena.creator_side || '-'))}</span>
+                  <span className={`badge ${arena.joiner_side==='pros' ? 'bg-green-100 text-green-800' : arena.joiner_side==='cons' ? 'bg-rose-100 text-rose-800' : 'bg-white border text-brand-brown/80'}`}>{arena.joiner_side || '-'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-sm text-brand-brown/60">Submitted</div>
-                  <span className="badge bg-white border text-brand-brown/80">{oppSubmitted ? '✅' : '❌'}</span>
+                  <span className="badge bg-white border text-brand-brown/80">{p2Submitted ? '✅' : '❌'}</span>
                 </div>
               </div>
             </div>

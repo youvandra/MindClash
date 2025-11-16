@@ -264,6 +264,7 @@ export default function Arena() {
                     </div>
                     <div className="flex gap-2 justify-end">
                       <button className="btn-outline" onClick={()=> setModal(null)}>Cancel</button>
+                      { !((joinArenaMeta.player1_account_id||joinArenaMeta.creator_account_id) && (joinArenaMeta.player2_account_id||joinArenaMeta.joiner_account_id)) && (
                       <button className="btn-secondary" onClick={async () => {
                         const acc = (sessionStorage.getItem('accountId') || '').trim()
                         const joined = await joinArenaByCode(joinArenaMeta.code, acc)
@@ -287,6 +288,7 @@ export default function Arena() {
                           if (typeof window !== 'undefined') window.location.href = `/arena/${joinArenaMeta.id}`
                         }
                       }}>Join as Player</button>
+                      )}
                       <button className="btn-primary" onClick={async () => {
                         const acc = (sessionStorage.getItem('accountId') || '').trim()
                         try {
