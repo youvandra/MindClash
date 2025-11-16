@@ -66,8 +66,15 @@ export default function ArenaRoom() {
   const oppSubmitted = isCreator ? !!arena?.joiner_knowledge_submitted : !!arena?.creator_knowledge_submitted
   const youAgentId = mySide === 'pros' ? arena?.agent_a_id : (mySide === 'cons' ? arena?.agent_b_id : undefined)
   const oppAgentId = mySide === 'pros' ? arena?.agent_b_id : (mySide === 'cons' ? arena?.agent_a_id : undefined)
+  const myDraftText = isCreator ? arena?.creator_draft_text : (isJoiner ? arena?.joiner_draft_text : '')
+  const oppDraftText = isCreator ? arena?.joiner_draft_text : arena?.creator_draft_text
+  const MIN_WORDS = 50
+  const countWords = (txt?: string) => String(txt||'').trim().split(/\s+/).filter(Boolean).length
+  const isTextSufficient = (txt?: string) => countWords(txt) >= MIN_WORDS
   const [timeLeft, setTimeLeft] = useState<number>(0)
   const autoSubmitRef = useRef<boolean>(false)
+  const [oppTimeLeft, setOppTimeLeft] = useState<number>(0)
+  const autoOppCheckRef = useRef<boolean>(false)
   useEffect(() => {
     if (!arena || arena.status !== 'challenge' || !arena.challenge_minutes) return
     if (!myWritingStartedAt) { setTimeLeft(arena.challenge_minutes * 60); return }
@@ -94,12 +101,30 @@ export default function ArenaRoom() {
 
   useEffect(() => {
     if (!arena || arena.status !== 'challenge') return
+    if (!myWritingStartedAt) return
     if (timeLeft > 0) return
     if (autoSubmitRef.current) return
     autoSubmitRef.current = true
     ;(async () => {
       try {
-        const needCancel = !arena.creator_knowledge_submitted || !arena.joiner_knowledge_submitted
+        if ((isCreator || isJoiner) && !youSubmitted) {
+          try {
+            if (!myWritingStartedAt) {
+              await challengeControl(arena.id, accId, 'start')
+            }
+            const currText = challengeText || myDraftText || ''
+            if (challengeAgentName && currText && mySide && isTextSufficient(currText)) {
+              await saveArenaDraft(arena.id, accId, challengeAgentName, currText)
+              const u = await submitArenaKnowledge(arena.id, mySide as any, accId, challengeAgentName, currText)
+              if (u && !u.error) {
+                const a0 = await getArenaById(id as string)
+                setArena(a0)
+                pushToast('Auto submit berhasil', 'success')
+              }
+            }
+          } catch {}
+        }
+        const needCancel = (!youSubmitted) && !isTextSufficient(myDraftText || challengeText || '')
         if (needCancel) {
           await cancelArena(arena.id)
           const a = await getArenaById(id as string)
@@ -111,7 +136,56 @@ export default function ArenaRoom() {
         pushToast(e?.message || 'Gagal membatalkan arena', 'error')
       }
     })()
-  }, [timeLeft, arena?.status, arena?.creator_knowledge_submitted, arena?.joiner_knowledge_submitted, id])
+  }, [timeLeft, arena?.status, arena?.creator_knowledge_submitted, arena?.joiner_knowledge_submitted, id, myWritingStartedAt, youSubmitted])
+
+  useEffect(() => {
+    if (!arena || arena.status !== 'challenge') return
+    const oppWritingStatus: 'idle'|'writing'|'paused'|'finished'|undefined = isCreator ? arena?.joiner_writing_status : arena?.creator_writing_status
+    const oppWritingStartedAt: string | undefined = isCreator ? arena?.joiner_writing_started_at : arena?.creator_writing_started_at
+    const oppPausedSecs: number = isCreator ? (arena?.joiner_paused_secs || 0) : (arena?.creator_paused_secs || 0)
+    const oppPausedAt: string | undefined = isCreator ? arena?.joiner_paused_at : arena?.creator_paused_at
+    if (!oppWritingStartedAt) { setOppTimeLeft(arena.challenge_minutes * 60); return }
+    const total = arena.challenge_minutes * 60
+    const computeRunning = () => {
+      const elapsed = Math.floor((Date.now() - new Date(oppWritingStartedAt).getTime()) / 1000) - (oppPausedSecs || 0)
+      const secs = Math.max(0, total - Math.max(0, elapsed))
+      setOppTimeLeft(secs)
+    }
+    const computePaused = () => {
+      const pausedAtTs = oppPausedAt ? new Date(oppPausedAt).getTime() : Date.now()
+      const elapsed = Math.floor((pausedAtTs - new Date(oppWritingStartedAt).getTime()) / 1000) - (oppPausedSecs || 0)
+      const secs = Math.max(0, total - Math.max(0, elapsed))
+      setOppTimeLeft(secs)
+    }
+    if (oppWritingStatus === 'writing') {
+      computeRunning()
+      const int = setInterval(computeRunning, 1000)
+      return () => clearInterval(int)
+    } else {
+      computePaused()
+    }
+  }, [arena?.challenge_minutes, arena?.status, isCreator ? arena?.joiner_writing_started_at : arena?.creator_writing_started_at, isCreator ? arena?.joiner_writing_status : arena?.creator_writing_status, isCreator ? arena?.joiner_paused_secs : arena?.creator_paused_secs, isCreator ? arena?.joiner_paused_at : arena?.creator_paused_at])
+
+  useEffect(() => {
+    if (!arena || arena.status !== 'challenge') return
+    if (autoOppCheckRef.current) return
+    const oppWritingStartedAt: string | undefined = isCreator ? arena?.joiner_writing_started_at : arena?.creator_writing_started_at
+    if (!oppWritingStartedAt) return
+    if (oppTimeLeft > 0) return
+    autoOppCheckRef.current = true
+    ;(async () => {
+      try {
+        if (!oppSubmitted && !isTextSufficient(oppDraftText || '')) {
+          await cancelArena(arena.id)
+          const a = await getArenaById(id as string)
+          setArena(a)
+          pushToast('Waktu habis. Arena dibatalkan', 'error')
+        }
+      } catch (e: any) {
+        pushToast(e?.message || 'Gagal membatalkan arena', 'error')
+      }
+    })()
+  }, [oppTimeLeft, arena?.status, oppDraftText, id, isCreator ? arena?.joiner_writing_started_at : arena?.creator_writing_started_at, oppSubmitted])
 
   useEffect(() => {
     if (!arena) return
@@ -324,6 +398,15 @@ export default function ArenaRoom() {
                     <button className="btn-outline" disabled={myWritingStatus!=='writing'} onClick={async ()=>{ await saveArenaDraft(arena.id, accId, challengeAgentName, challengeText); const a = await getArenaById(id as string); setArena(a) }}>Save</button>
                     <button className="btn-secondary" disabled={!mySide || timeLeft<=0 || !challengeAgentName || !(myWritingStatus==='writing' || myWritingStatus==='paused') || !(challengeText && challengeText.length>0)} onClick={async ()=>{
                       try {
+                        try {
+                          if (myWritingStatus==='paused') {
+                            await challengeControl(arena.id, accId, 'resume')
+                          }
+                          if (!myWritingStartedAt) {
+                            await challengeControl(arena.id, accId, 'start')
+                          }
+                        } catch {}
+                        await saveArenaDraft(arena.id, accId, challengeAgentName, challengeText)
                         const u = await submitArenaKnowledge(arena.id, mySide as any, accId, challengeAgentName, challengeText)
                         if (u && !u.error) {
                           setChallengeText('')
@@ -332,7 +415,52 @@ export default function ArenaRoom() {
                           setArena(a)
                           pushToast('Submit berhasil', 'success')
                         } else {
-                          const msg = (u && u.error) ? (typeof u.error === 'string' ? u.error : 'Submit gagal') : 'Submit gagal'
+                          const errStr = (u && typeof u.error === 'string') ? u.error : ((u && u.error && typeof u.error === 'object' && (u.error.message || u.error.code)) || '')
+                          if (/not started/i.test(errStr)) {
+                            try {
+                              await challengeControl(arena.id, accId, 'start')
+                              await saveArenaDraft(arena.id, accId, challengeAgentName, challengeText)
+                              const u2 = await submitArenaKnowledge(arena.id, mySide as any, accId, challengeAgentName, challengeText)
+                              if (u2 && !u2.error) {
+                                setChallengeText('')
+                                setChallengeAgentName('')
+                                const a = await getArenaById(id as string)
+                                setArena(a)
+                                pushToast('Submit berhasil', 'success')
+                                return
+                              }
+                            } catch {}
+                          }
+                          if (/time\s*over|expired/i.test(errStr)) {
+                            try {
+                              const aNow = await getArenaById(id as string)
+                              setArena(aNow)
+                              const startedAt = isCreator ? aNow?.creator_writing_started_at : aNow?.joiner_writing_started_at
+                              const pausedSecs = isCreator ? (aNow?.creator_paused_secs || 0) : (aNow?.joiner_paused_secs || 0)
+                              const statusNow = isCreator ? aNow?.creator_writing_status : aNow?.joiner_writing_status
+                              const total = (aNow?.challenge_minutes || 0) * 60
+                              const elapsed = startedAt ? Math.floor((Date.now() - new Date(startedAt).getTime())/1000) - pausedSecs : 0
+                              const left = Math.max(0, total - Math.max(0, elapsed))
+                              if (left > 0) {
+                                if (statusNow==='paused') {
+                                  await challengeControl(arena.id, accId, 'resume')
+                                }
+                                await saveArenaDraft(arena.id, accId, challengeAgentName, challengeText)
+                                const u3 = await submitArenaKnowledge(arena.id, mySide as any, accId, challengeAgentName, challengeText)
+                                if (u3 && !u3.error) {
+                                  setChallengeText('')
+                                  setChallengeAgentName('')
+                                  const a = await getArenaById(id as string)
+                                  setArena(a)
+                                  pushToast('Submit berhasil', 'success')
+                                  return
+                                }
+                              } else {
+                                pushToast('Waktu habis', 'error')
+                              }
+                            } catch {}
+                          }
+                          const msg = errStr || 'Submit gagal'
                           pushToast(msg, 'error')
                         }
                       } catch (e: any) {
