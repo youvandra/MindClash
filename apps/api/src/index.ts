@@ -13,6 +13,16 @@ app.use(cors())
 app.use(express.json({ limit: '1mb' }))
 const generating = new Set<string>()
 
+function systemPrompt(name: string, r: RoundName) {
+  if (r === 'opening') return `You are ${name}. Use only the provided knowledge. Present your stance clearly. Establish position in 3–5 short, well-ordered points or 1–2 compact paragraphs. Do not include any labels or stage names; never write words like "round", "opening", "rebuttal", "crossfire", or "closing". Output only the content. If absolutely no usable content exists, reply "unknown".`
+  if (r === 'direct_arguments') return `You are ${name}. Use only the provided knowledge. Give your main argument: strongest points, evidence, and reasoning. Use structured numbered points or short paragraphs. Do not include any labels or stage names; never write words like "round", "opening", "rebuttal", "crossfire", or "closing". Output only the content. If absolutely no usable content exists, reply "unknown".`
+  if (r === 'rebuttals') return `You are ${name}. Use only the provided knowledge. Rebut the opponent: directly attack and dismantle opposite points with evidence from the knowledge. Keep it precise in short paragraphs or numbered lines. Do not include any labels or stage names; never write words like "round", "opening", "rebuttal", "crossfire", or "closing". Output only the content. If absolutely no usable content exists, reply "unknown".`
+  if (r === 'counter_rebuttals') return `You are ${name}. Use only the provided knowledge. Provide a shorter, more focused counter to the opponent's rebuttal — a compact counter‑punch that addresses their strongest rebuttal point. 2–3 tight sentences or 2–3 numbered mini‑points. Do not include any labels or stage names; never write words like "round", "opening", "rebuttal", "crossfire", or "closing". Output only the content. If absolutely no usable content exists, reply "unknown".`
+  if (r === 'question_crossfire') return `You are ${name}. Use only the provided knowledge. Ask 1–2 critical questions that expose weaknesses or demand clarity from the opponent. Only output the questions as concise numbered lines. Do not include answers or labels; never write words like "question" or "answer" or any stage names. Output only the content. If absolutely no usable content exists, reply "unknown".`
+  if (r === 'answer_crossfire') return `You are ${name}. Use only the provided knowledge. Respond crisply to the opponent's questions in 1–2 concise answers or numbered lines. Provide direct, evidence‑backed replies. Do not include any labels; never write words like "question" or "answer" or any stage names. Output only the content. If absolutely no usable content exists, reply "unknown".`
+  return `You are ${name}. Use only the provided knowledge. Give final arguments: summarize and conclude your stance with a strong, compact closing in 1–2 short paragraphs. Tighten logic and deliver the final punch. Do not include any labels or stage names; never write words like "round", "opening", "rebuttal", "crossfire", or "closing". Output only the content. If absolutely no usable content exists, reply "unknown".`
+}
+
 app.get('/health', (req: Request, res: Response) => {
   res.json({ ok: true, supabase: persistenceInfo.useSupabase })
 })
@@ -154,23 +164,16 @@ app.post('/matches', async (req: Request, res: Response) => {
   const aggA = kpAContents.join('\n\n---\n')
   const aggB = kpBContents.join('\n\n---\n')
 
-  const rounds: RoundName[] = ['opening', 'rebuttal', 'crossfire', 'closing']
+  const rounds: RoundName[] = ['opening', 'direct_arguments', 'rebuttals', 'counter_rebuttals', 'question_crossfire', 'answer_crossfire', 'final_arguments']
   const entries: RoundEntry[] = []
-
-  function sys(name: string, r: RoundName) {
-    if (r === 'opening') return `You are ${name}. Use only the provided knowledge. Produce a concise opening that frames the thesis and strongest points strictly from the knowledge. If absolutely no usable content exists, reply "unknown".`
-    if (r === 'rebuttal') return `You are ${name}. Use only the provided knowledge. Produce a focused rebuttal that directly addresses the opponent's claims using evidence from the knowledge. Be specific and avoid generic statements.`
-    if (r === 'crossfire') return `You are ${name}. Use only the provided knowledge. Produce a crossfire-style exchange: challenge the opponent with 2–3 short questions or points and provide compact follow-ups that expose weaknesses based on what the opponent said. Keep it crisp and refer to the knowledge.`
-    return `You are ${name}. Use only the provided knowledge. Produce a clear closing that summarizes your strongest arguments and gives a definitive conclusion aligned with the knowledge. Avoid introducing new points not grounded in the knowledge.`
-  }
 
   for (const r of rounds) {
     const prevA = entries.filter(e => e.agentId === agentA.id).map(e => `${e.round}: ${e.text}`).join('\n')
     const prevB = entries.filter(e => e.agentId === agentB.id).map(e => `${e.round}: ${e.text}`).join('\n')
-    const promptA = `Round: ${r}\nTopic: ${topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
-    const promptB = `Round: ${r}\nTopic: ${topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
-    const aText = await generateText(sys(agentA.name, r), promptA)
-    const bText = await generateText(sys(agentB.name, r), promptB)
+    const promptA = `Topic: ${topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
+    const promptB = `Topic: ${topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
+    const aText = await generateText(systemPrompt(agentA.name, r), promptA)
+    const bText = await generateText(systemPrompt(agentB.name, r), promptB)
     entries.push({ round: r, agentId: agentA.id, text: aText })
     entries.push({ round: r, agentId: agentB.id, text: bText })
   }
@@ -517,11 +520,11 @@ app.post('/arenas/start', async (req: Request, res: Response) => {
     const kpA = await db.getAgent(a.agent_a_id)
     const kpB = await db.getAgent(a.agent_b_id)
     if (!kpA || !kpB) return res.status(404).json({ error: 'Agent not found' })
-    const rounds: RoundName[] = ['opening', 'rebuttal', 'crossfire', 'closing']
+    const rounds: RoundName[] = ['opening', 'direct_arguments', 'rebuttals', 'counter_rebuttals', 'question_crossfire', 'answer_crossfire', 'final_arguments']
     const entries: RoundEntry[] = []
     for (const r of rounds) {
-      const sysA = `You are ${kpA.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
-      const sysB = `You are ${kpB.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
+      const sysA = systemPrompt(kpA.name, r)
+      const sysB = systemPrompt(kpB.name, r)
       const prevA = entries.filter(e => e.agentId === kpA.id).map(e => `${e.round}: ${e.text}`).join('\n')
       const prevB = entries.filter(e => e.agentId === kpB.id).map(e => `${e.round}: ${e.text}`).join('\n')
       const kpATexts: string[] = []
@@ -530,8 +533,8 @@ app.post('/arenas/start', async (req: Request, res: Response) => {
       for (const id of (kpB.knowledgePackIds || [])) { const k = await db.getKnowledgePack(id); if (k) kpBTexts.push(k.content) }
       const aggA = kpATexts.join('\n\n---\n')
       const aggB = kpBTexts.join('\n\n---\n')
-      const promptA = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
-      const promptB = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
+      const promptA = `Topic: ${a.topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
+      const promptB = `Topic: ${a.topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
       const aText = await generateText(sysA, promptA)
       const bText = await generateText(sysB, promptB)
       entries.push({ round: r, agentId: kpA.id, text: aText })
@@ -615,7 +618,7 @@ app.get('/arenas/:id/stream', async (req: Request, res: Response) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`)
     }
 
-    const rounds: RoundName[] = ['opening', 'rebuttal', 'crossfire', 'closing']
+    const rounds: RoundName[] = ['opening', 'direct_arguments', 'rebuttals', 'counter_rebuttals', 'question_crossfire', 'answer_crossfire', 'final_arguments']
 
     if (a.match_id) {
       const match = await db.getMatch(a.match_id)
@@ -647,8 +650,8 @@ app.get('/arenas/:id/stream', async (req: Request, res: Response) => {
     const entries: RoundEntry[] = []
     for (const r of rounds) {
       send('round', { round: r })
-      const sysA = `You are ${kpA.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
-      const sysB = `You are ${kpB.name}. Use only the provided knowledge. Do not use any external information. When the round is opening, produce a concise opening derived strictly from the provided knowledge. If absolutely no usable content exists, reply "unknown". Do not reply "unknown" if general points exist in knowledge.`
+      const sysA = systemPrompt(kpA.name, r)
+      const sysB = systemPrompt(kpB.name, r)
       const prevA = entries.filter(e => e.agentId === kpA.id).map(e => `${e.round}: ${e.text}`).join('\n')
       const prevB = entries.filter(e => e.agentId === kpB.id).map(e => `${e.round}: ${e.text}`).join('\n')
       const kpATexts: string[] = []
@@ -657,8 +660,8 @@ app.get('/arenas/:id/stream', async (req: Request, res: Response) => {
       for (const id of (kpB.knowledgePackIds || [])) { const k = await db.getKnowledgePack(id); if (k) kpBTexts.push(k.content) }
       const aggA = kpATexts.join('\n\n---\n')
       const aggB = kpBTexts.join('\n\n---\n')
-      const promptA = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
-      const promptB = `Round: ${r}\nTopic: ${a.topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
+      const promptA = `Topic: ${a.topic}\nKnowledge:\n${aggA}\nOpponent said:\n${prevB}`
+      const promptB = `Topic: ${a.topic}\nKnowledge:\n${aggB}\nOpponent said:\n${prevA}`
       const aTextFull = await generateText(sysA, promptA)
       const bTextFull = await generateText(sysB, promptB)
       for (const chunk of chunkText(aTextFull)) { send('token', { side: 'pros', text: chunk }); await sleep(60) }

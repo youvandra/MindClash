@@ -16,7 +16,14 @@ export type Agent = {
   createdAt: number
 }
 
-export type RoundName = 'opening' | 'rebuttal' | 'crossfire' | 'closing'
+export type RoundName =
+  | 'opening'
+  | 'direct_arguments'
+  | 'rebuttals'
+  | 'counter_rebuttals'
+  | 'question_crossfire'
+  | 'answer_crossfire'
+  | 'final_arguments'
 
 export type RoundEntry = {
   round: RoundName
