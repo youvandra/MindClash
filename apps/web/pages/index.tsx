@@ -15,7 +15,17 @@ export default function Home() {
       setAccountId(acc)
       setConnected(true)
       setStatus('Connected')
+      return
     }
+    ;(async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const sess = data?.session
+        if (sess && !acc) {
+          await ensureCustodial()
+        }
+      } catch {}
+    })()
   }, [])
 
   async function getHashConnect() {
@@ -33,6 +43,50 @@ export default function Home() {
     const hc = new HashConnect(ledger, projectId, appMetadata, false)
     w.__hashconnect = hc
     return hc
+  }
+
+  async function ensureCustodial() {
+    const { data } = await supabase.auth.getSession()
+    const sess = data?.session
+    const user = sess?.user
+    if (!user) return
+    const userId = user.id
+    const email = (user as any)?.email || (user as any)?.user_metadata?.email || ''
+    let cw: any
+    try {
+      const { data: existing } = await supabase.from('custodial_wallets').select('*').eq('user_id', userId).maybeSingle()
+      cw = existing
+    } catch {}
+    if (!cw) {
+      const digits = String(userId).replace(/[^0-9]/g, '')
+      const tail = digits.slice(-7) || String(Math.floor(Math.random()*9000000)+1000000)
+      const accId = `0.0.${tail}`
+      const { data: inserted } = await supabase.from('custodial_wallets').insert({ user_id: userId, email, provider: 'google', account_id: accId }).select('*').maybeSingle()
+      cw = inserted
+    }
+    const accId = String(cw?.account_id || '')
+    if (!accId) return
+    try {
+      const { data: existingUser } = await supabase.from('users').select('*').eq('account_id', accId).maybeSingle()
+      if (!existingUser) {
+        const displayName = (user as any)?.user_metadata?.full_name || (email ? email.split('@')[0] : `User-${accId}`)
+        await supabase.from('users').insert({ account_id: accId, name: displayName })
+      }
+    } catch {}
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('accountId', accId)
+    }
+    setAccountId(accId)
+    setConnected(true)
+    setStatus('Connected')
+  }
+
+  async function handleGoogle() {
+    try {
+      await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined } })
+    } catch (e: any) {
+      setStatus(e?.message || 'Google sign-in error')
+    }
   }
 
   async function getFreshHashConnect() {
@@ -140,17 +194,20 @@ export default function Home() {
                   <Link href="/packs" className="btn-outline">Manage Packs</Link>
                 </>
               ) : (
-                <button className={`btn-primary ${connecting ? 'bg-gray-200 text-gray-500 hover:bg-gray-200 cursor-not-allowed' : ''}`} onClick={handleConnect} disabled={connecting}>
-                  {connecting ? (
-                    <span className="flex items-center gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 animate-spin">
-                        <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-                        <path d="M12 2a10 10 0 0 1 10 10" />
-                      </svg>
-                      <span>Connecting...</span>
-                    </span>
-                  ) : 'Connect Wallet'}
-                </button>
+                <>
+                  <button className={`btn-primary ${connecting ? 'bg-gray-200 text-gray-500 hover:bg-gray-200 cursor-not-allowed' : ''}`} onClick={handleConnect} disabled={connecting}>
+                    {connecting ? (
+                      <span className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 animate-spin">
+                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                          <path d="M12 2a10 10 0 0 1 10 10" />
+                        </svg>
+                        <span>Connecting...</span>
+                      </span>
+                    ) : 'Connect Wallet'}
+                  </button>
+                  <button className="btn-outline" onClick={handleGoogle}>Sign in with Google</button>
+                </>
               )}
             </div>
             {status && !connected && <div className="text-sm">{status}</div>}

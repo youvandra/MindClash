@@ -49,7 +49,6 @@ export default function Profile() {
     try {
       const { error } = await supabase.from('users').update({ name }).eq('account_id', accountId)
       if (error) throw new Error(error.message || 'Update failed')
-      setStatus('Saved')
       {
         const tid = `${Date.now()}-${Math.random()}`
         setToasts(t => [...t, { id: tid, text: 'Name updated', kind: 'success' }])
