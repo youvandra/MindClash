@@ -384,11 +384,6 @@ export default function ArenaRoom() {
               </div>
             )}
             {false}
-            {String(arena.status||'').toLowerCase() === 'completed' && (
-              <div className="mt-4 flex justify-end">
-                <a className="btn-primary" href={`/arena/${id}/debateroom`}>View Results</a>
-              </div>
-            )}
           </div>
           {!arena.joiner_account_id && !isCreator && (
             <button className="btn-outline" onClick={handleJoin}>Join Room</button>
@@ -396,7 +391,6 @@ export default function ArenaRoom() {
           {arena.game_type !== 'challenge' && (
             <div className="space-y-2 card p-4">
               <div className="font-semibold">Agents</div>
-              <div className="text-sm">Pros {arena.agent_a_id ? agents.find(x => x.id === arena.agent_a_id)?.name : '-'} · Cons {arena.agent_b_id ? agents.find(x => x.id === arena.agent_b_id)?.name : '-'}</div>
               {(isCreator || isJoiner) && (
                 <div className="flex gap-2 items-center">
                   <select className="select" value={myAgent} onChange={e => setMyAgent(e.target.value)} disabled={!((isCreator ? arena.creator_side : arena.joiner_side) && arena.status === 'select_agent') || youSubmitted}>
@@ -411,6 +405,11 @@ export default function ArenaRoom() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+          {String(arena.status||'').toLowerCase() === 'completed' && (
+            <div className="mt-4 flex justify-end">
+              <a className="btn-primary" href={`/arena/${id}/debateroom`}>View Results</a>
             </div>
           )}
           {arena.game_type === 'challenge' && arena.status === 'challenge' && (
