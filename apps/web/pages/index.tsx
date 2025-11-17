@@ -144,9 +144,16 @@ export default function Home() {
       setStatus('Connected')
 
       try {
-        const { data: existing } = await supabase.from('users').select('*').eq('account_id', accId).maybeSingle()
-        if (!existing) {
-          await supabase.from('users').insert({ account_id: accId, name: `User-${accId}` })
+        const { data: sessData } = await supabase.auth.getSession()
+        const uid = sessData?.session?.user?.id
+        if (uid) {
+          const { data: cw } = await supabase.from('custodial_wallets').select('account_id').eq('user_id', uid).maybeSingle()
+          if (cw && String(cw.account_id) === accId) {
+            const { data: existing } = await supabase.from('users').select('*').eq('account_id', accId).maybeSingle()
+            if (!existing) {
+              await supabase.from('users').insert({ account_id: accId, name: `User-${accId}` })
+            }
+          }
         }
       } catch {}
 

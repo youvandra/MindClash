@@ -47,6 +47,17 @@ export default function Profile() {
     setSaving(true)
     setStatus('')
     try {
+      const { data: sessData } = await supabase.auth.getSession()
+      const uid = sessData?.session?.user?.id
+      if (!uid) {
+        setStatus('Sign in to update profile')
+        return
+      }
+      const { data: cw } = await supabase.from('custodial_wallets').select('account_id').eq('user_id', uid).maybeSingle()
+      if (!cw || String(cw.account_id) !== accountId) {
+        setStatus('Profile editing requires Google sign-in')
+        return
+      }
       const { error } = await supabase.from('users').update({ name }).eq('account_id', accountId)
       if (error) throw new Error(error.message || 'Update failed')
       {
