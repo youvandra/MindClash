@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import '../styles/globals.css'
+import { supabase } from '../lib/supabase'
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter()
@@ -17,6 +18,7 @@ export default function App({ Component, pageProps }: AppProps) {
 
   async function handleDisconnect() {
     try {
+      try { await supabase.auth.signOut() } catch {}
       const topic = typeof window !== 'undefined' ? sessionStorage.getItem('hcTopic') : null
       if (topic) {
         const mod: any = await import('hashconnect')
