@@ -11,12 +11,12 @@ export default function Upload() {
   const [specialization, setSpecialization] = useState('')
 
   useEffect(() => {
-    const acc = typeof window !== 'undefined' ? localStorage.getItem('accountId') : null
+    const acc = typeof window !== 'undefined' ? sessionStorage.getItem('accountId') : null
     if (!acc) {
       window.location.href = '/'
       return
     }
-    listKnowledgePacks().then(setList)
+    listKnowledgePacks(String(acc)).then(setList)
   }, [])
 
   return (
@@ -32,7 +32,8 @@ export default function Upload() {
           setContent(txt)
         }} />
         <button className="px-4 py-2 bg-blue-600 text-white" onClick={async () => {
-          const kp = await createKnowledgePack(title, content)
+          const acc = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
+          const kp = await createKnowledgePack(title, content, acc)
           setList(prev => [kp, ...prev])
           setTitle('')
           setContent('')

@@ -281,7 +281,7 @@ export default function Packs() {
                   <button className="btn-outline" onClick={()=> setModal(null)}>Cancel</button>
                   <button className="btn-secondary" disabled={!agentName || !agentKp} onClick={async ()=>{
                     try {
-                      const owner = localStorage.getItem('accountId') || undefined
+                      const owner = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || undefined) : undefined
                       const ag = await createAgent(agentName, agentKp, owner, agentSpec || undefined)
                       setAgents(prev => [ag, ...prev])
                       setAgentName('')

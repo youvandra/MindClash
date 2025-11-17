@@ -82,16 +82,20 @@ export default function ArenaRoom() {
   const myPausedAt: string | undefined = isCreator ? arena?.creator_paused_at : (isJoiner ? arena?.joiner_paused_at : undefined)
   const youReady = isCreator ? !!arena?.creator_ready : (isJoiner ? !!arena?.joiner_ready : false)
   const oppReady = isCreator ? !!arena?.joiner_ready : !!arena?.creator_ready
-  const youSubmitted = isCreator ? !!arena?.creator_knowledge_submitted : (isJoiner ? !!arena?.joiner_knowledge_submitted : false)
-  const oppSubmitted = isCreator ? !!arena?.joiner_knowledge_submitted : !!arena?.creator_knowledge_submitted
+  const youSubmitted = (arena?.game_type === 'challenge')
+    ? (isCreator ? !!arena?.creator_knowledge_submitted : (isJoiner ? !!arena?.joiner_knowledge_submitted : false))
+    : !!(isCreator ? (arena?.creator_side === 'pros' ? arena?.agent_a_id : (arena?.creator_side === 'cons' ? arena?.agent_b_id : undefined)) : (isJoiner ? (arena?.joiner_side === 'pros' ? arena?.agent_a_id : (arena?.joiner_side === 'cons' ? arena?.agent_b_id : undefined)) : undefined))
+  const oppSubmitted = (arena?.game_type === 'challenge')
+    ? (isCreator ? !!arena?.joiner_knowledge_submitted : !!arena?.creator_knowledge_submitted)
+    : !!(isCreator ? (arena?.joiner_side === 'pros' ? arena?.agent_a_id : (arena?.joiner_side === 'cons' ? arena?.agent_b_id : undefined)) : (arena?.creator_side === 'pros' ? arena?.agent_a_id : (arena?.creator_side === 'cons' ? arena?.agent_b_id : undefined)))
   const youAgentId = mySide === 'pros' ? arena?.agent_a_id : (mySide === 'cons' ? arena?.agent_b_id : undefined)
   const oppAgentId = mySide === 'pros' ? arena?.agent_b_id : (mySide === 'cons' ? arena?.agent_a_id : undefined)
   const myDraftText = isCreator ? arena?.creator_draft_text : (isJoiner ? arena?.joiner_draft_text : '')
   const oppDraftText = isCreator ? arena?.joiner_draft_text : arena?.creator_draft_text
   const p1Ready = !!arena?.creator_ready
   const p2Ready = !!arena?.joiner_ready
-  const p1Submitted = !!arena?.creator_knowledge_submitted
-  const p2Submitted = !!arena?.joiner_knowledge_submitted
+  const p1Submitted = (arena?.game_type === 'challenge') ? !!arena?.creator_knowledge_submitted : !!arena?.agent_a_id
+  const p2Submitted = (arena?.game_type === 'challenge') ? !!arena?.joiner_knowledge_submitted : !!arena?.agent_b_id
   const MIN_WORDS = 50
   const countWords = (txt?: string) => String(txt||'').trim().split(/\s+/).filter(Boolean).length
   const isTextSufficient = (txt?: string) => countWords(txt) >= MIN_WORDS
@@ -272,6 +276,7 @@ export default function ArenaRoom() {
 
   async function handleSelectAgent(side: 'pros' | 'cons') {
     if (!id || !myAgent) return
+    if (youSubmitted) return
     await selectArenaAgent(id, side, myAgent)
     const a = await getArenaById(id)
     setArena(a)
@@ -394,12 +399,16 @@ export default function ArenaRoom() {
               <div className="text-sm">Pros {arena.agent_a_id ? agents.find(x => x.id === arena.agent_a_id)?.name : '-'} · Cons {arena.agent_b_id ? agents.find(x => x.id === arena.agent_b_id)?.name : '-'}</div>
               {(isCreator || isJoiner) && (
                 <div className="flex gap-2 items-center">
-                  <select className="select" value={myAgent} onChange={e => setMyAgent(e.target.value)} disabled={!((isCreator ? arena.creator_side : arena.joiner_side) && arena.status === 'select_agent')}>
+                  <select className="select" value={myAgent} onChange={e => setMyAgent(e.target.value)} disabled={!((isCreator ? arena.creator_side : arena.joiner_side) && arena.status === 'select_agent') || youSubmitted}>
                     <option value="">Select Your Agent</option>
                     {agents.filter(x => x.ownerAccountId === accId).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
-                  {isCreator && arena.creator_side && arena.status === 'select_agent' && <button className="btn-secondary whitespace-nowrap" onClick={()=>handleSelectAgent(arena.creator_side)}>Set My Agent</button>}
-                  {isJoiner && arena.joiner_side && arena.status === 'select_agent' && <button className="btn-secondary whitespace-nowrap" onClick={()=>handleSelectAgent(arena.joiner_side)}>Set My Agent</button>}
+                  {isCreator && arena.creator_side && arena.status === 'select_agent' && (
+                    <button className={`btn-secondary whitespace-nowrap ${youSubmitted ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed hover:bg-gray-200' : ''}`} onClick={()=>handleSelectAgent(arena.creator_side)} disabled={youSubmitted}>{youSubmitted ? 'Submitted' : 'Set My Agent'}</button>
+                  )}
+                  {isJoiner && arena.joiner_side && arena.status === 'select_agent' && (
+                    <button className={`btn-secondary whitespace-nowrap ${youSubmitted ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed hover:bg-gray-200' : ''}`} onClick={()=>handleSelectAgent(arena.joiner_side)} disabled={youSubmitted}>{youSubmitted ? 'Submitted' : 'Set My Agent'}</button>
+                  )}
                 </div>
               )}
             </div>
