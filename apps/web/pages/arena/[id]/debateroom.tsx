@@ -39,7 +39,7 @@ export default function ArenaDebateRoom() {
   async function startReplay(round?: string) {
     if (!arena?.match_id) return
     const m = await getMatch(arena.match_id)
-    const order = round ? [round] : ['opening','rebuttal','crossfire','closing']
+    const order = round ? [round] : ['opening','direct_arguments','rebuttals','counter_rebuttals','question_crossfire','answer_crossfire','final_arguments']
     setReplayPros('')
     setReplayCons('')
     setReplayScores(m.judgeScores)
@@ -225,15 +225,18 @@ export default function ArenaDebateRoom() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay()} disabled={!arena?.match_id}>All</button>
                   <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('opening')} disabled={!arena?.match_id}>Opening</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('rebuttal')} disabled={!arena?.match_id}>Rebuttal</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('crossfire')} disabled={!arena?.match_id}>Crossfire</button>
-                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('closing')} disabled={!arena?.match_id}>Closing</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('direct_arguments')} disabled={!arena?.match_id}>Direct Arguments</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('rebuttals')} disabled={!arena?.match_id}>Rebuttals</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('counter_rebuttals')} disabled={!arena?.match_id}>Counter Rebuttals</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('question_crossfire')} disabled={!arena?.match_id}>(Question) Crossfire</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('answer_crossfire')} disabled={!arena?.match_id}>(Answer) Crossfire</button>
+                  <button className={`btn-page ${!arena?.match_id ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`} onClick={()=>startReplay('final_arguments')} disabled={!arena?.match_id}>Final Arguments</button>
                 {false}
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="text-sm">Round</div>
-                    <span className="badge bg-white border text-brand-brown/80">{currentRound || '-'}</span>
+                    <span className="badge bg-white border text-brand-brown/80">{labelRound(currentRound) || '-'}</span>
                   </div>
                   <div className="w-48 h-2 bg-brand-brown/10 rounded">
                     <div className="h-2 bg-brand-blue rounded" style={{ width: `${replayPct}%` }}></div>
@@ -273,4 +276,16 @@ function chunkText(t: string) {
     i += size
   }
   return chunks.length ? chunks : ['']
+}
+
+function labelRound(r: string) {
+  if (!r) return ''
+  if (r === 'opening') return 'Opening'
+  if (r === 'direct_arguments') return 'Direct Arguments'
+  if (r === 'rebuttals') return 'Rebuttals'
+  if (r === 'counter_rebuttals') return 'Counter Rebuttals'
+  if (r === 'question_crossfire') return '(Question) Crossfire'
+  if (r === 'answer_crossfire') return '(Answer) Crossfire'
+  if (r === 'final_arguments') return 'Final Arguments'
+  return r
 }
