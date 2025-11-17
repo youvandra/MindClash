@@ -436,6 +436,21 @@ export const db = {
       return
     }
   }
+  , upsertUserName: async (accountId: string, name: string): Promise<{ accountId: string; name: string } | undefined> => {
+    if (supabase) {
+      const { data: existing } = await supabase.from('users').select('account_id').eq('account_id', accountId).maybeSingle()
+      if (existing) {
+        const { data, error } = await supabase.from('users').update({ name }).eq('account_id', accountId).select('account_id,name').single()
+        if (error) return undefined
+        return { accountId: data.account_id, name: data.name }
+      } else {
+        const { data, error } = await supabase.from('users').insert({ account_id: accountId, name }).select('account_id,name').single()
+        if (error) return undefined
+        return { accountId: data.account_id, name: data.name }
+      }
+    }
+    return undefined
+  }
   , listLeaderboardAccounts: async (): Promise<{ accountId: string; name?: string; elo: number; agentCount: number }[]> => {
     if (supabase) {
       const { data: users } = await supabase.from('users').select('account_id,name,elo_rating')

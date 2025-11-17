@@ -174,6 +174,7 @@ export default function Home() {
 
   async function handleDisconnect() {
     try {
+      try { await supabase.auth.signOut() } catch {}
       const topic = typeof window !== 'undefined' ? sessionStorage.getItem('hcTopic') : null
       const hc = await getHashConnect()
       if (topic) {

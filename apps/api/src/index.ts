@@ -573,6 +573,19 @@ app.get('/leaderboard', async (req: Request, res: Response) => {
   }
 })
 
+app.post('/users/name', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ accountId: z.string(), name: z.string().min(1).max(120) })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const u = await db.upsertUserName(parsed.data.accountId, parsed.data.name)
+    if (!u) return res.status(500).json({ error: 'Update failed' })
+    res.json(u)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
 app.get('/arenas/:id/stream', async (req: Request, res: Response) => {
   try {
     const arenaId = req.params.id

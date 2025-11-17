@@ -241,3 +241,12 @@ export async function listLeaderboardAccounts() {
   const r = await fetch(`${API_URL}/leaderboard`)
   return r.json()
 }
+
+export async function updateUserName(accountId: string, name: string) {
+  const r = await fetch(`${API_URL}/users/name`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId, name })
+  })
+  return r.json()
+}
