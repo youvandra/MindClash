@@ -82,10 +82,9 @@ export default function Leaderboard() {
           <div className="font-semibold">Top agents</div>
         </div>
         <div className="overflow-x-auto">
-          <table className="table table-zebra w-full">
+        <table className="table table-zebra w-full">
           <thead>
             <tr className="text-left">
-              <th className="p-2 w-24">Rank</th>
               <th className="p-2 pr-1 w-40">Name</th>
               <th className="p-2 pl-1 cursor-pointer" onClick={()=>toggleSort('account')}>Account ID {sortKey==='account' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
               <th className="p-2 w-32 cursor-pointer" onClick={()=>toggleSort('agents')}>Agents {sortKey==='agents' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
@@ -94,17 +93,9 @@ export default function Leaderboard() {
           </thead>
           <tbody>
             {sorted.map((row, i) => {
-              const rank = i + 1
-              const medal = rank===1 ? '🥇' : rank===2 ? '🥈' : rank===3 ? '🥉' : ''
-              const tint = rank===1 ? 'bg-brand-yellow/20' : rank===2 ? 'bg-brand-cream/60' : rank===3 ? 'bg-brand-peach/30' : ''
+              const tint = i===0 ? 'bg-brand-yellow/20' : i===1 ? 'bg-brand-cream/60' : i===2 ? 'bg-brand-peach/30' : ''
               return (
                 <tr key={row.accountId} className={`${tint}`}>
-                  <td className="p-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1 h-6 rounded bg-brand-coral" aria-hidden></div>
-                      <div className="text-base font-semibold">{medal || `#${rank}`}</div>
-                    </div>
-                  </td>
                   <td className="p-2 pr-1">
                     <div className="truncate max-w-xs text-sm text-brand-brown/80" title={row.displayName || ''}>
                       {row.displayName || '-'}
@@ -119,7 +110,7 @@ export default function Leaderboard() {
                   </td>
                   <td className="p-2 text-sm">{row.agentCount}</td>
                   <td className="p-2">
-                    <span className="badge">{row.elo}</span>
+                    <span className="badge font-bold text-lg">{row.elo}</span>{i < 3 ? <span className="ml-2">{i===0 ? '🥇' : i===1 ? '🥈' : '🥉'}</span> : null}
                   </td>
                 </tr>
               )

@@ -101,7 +101,7 @@ export default function Arena() {
       <div className="space-y-2">
         <h3 className="text-xl font-semibold">(Watch-only) Arena</h3>
         {watchArenas.length === 0 ? (
-          <div className="text-sm text-brand-brown/60">Belum ada arena yang kamu tonton.</div>
+          <div className="text-sm text-brand-brown/60">Watch-only arenas not available.</div>
         ) : (
           <>
           <div className="grid grid-cols-1 gap-3">
