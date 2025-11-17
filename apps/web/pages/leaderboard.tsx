@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { listLeaderboardAccounts } from '../lib/api'
+import { supabase } from '../lib/supabase'
 
 export default function Leaderboard() {
   const [rows, setRows] = useState<any[]>([])
@@ -9,7 +10,21 @@ export default function Leaderboard() {
   const [timeframe, setTimeframe] = useState<'all'|'week'>('all')
 
   useEffect(() => {
-    listLeaderboardAccounts().then(xs => setRows(xs))
+    ;(async () => {
+      const xs = await listLeaderboardAccounts()
+      try {
+        const ids = xs.map((x: any) => String(x.accountId)).filter(Boolean)
+        if (ids.length > 0) {
+          const { data } = await supabase.from('users').select('account_id,name').in('account_id', ids)
+          const map: Record<string, string> = {}
+          ;(data || []).forEach((u: any) => { map[String(u.account_id)] = String( u.name || '') })
+          const withNames = xs.map((x: any) => ({ ...x, displayName: map[String(x.accountId)] || '' }))
+          setRows(withNames)
+          return
+        }
+      } catch {}
+      setRows(xs)
+    })()
   }, [])
 
   const sorted = useMemo(() => {
@@ -70,7 +85,8 @@ export default function Leaderboard() {
           <thead>
             <tr className="text-left">
               <th className="p-2 w-24">Rank</th>
-              <th className="p-2 cursor-pointer" onClick={()=>toggleSort('account')}>Account ID {sortKey==='account' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
+              <th className="p-2 pr-1 w-40">Name</th>
+              <th className="p-2 pl-1 cursor-pointer" onClick={()=>toggleSort('account')}>Account ID {sortKey==='account' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
               <th className="p-2 w-32 cursor-pointer" onClick={()=>toggleSort('agents')}>Agents {sortKey==='agents' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
               <th className="p-2 w-40 cursor-pointer" onClick={()=>toggleSort('elo')}>ELO Rating {sortKey==='elo' ? (sortDir==='asc'?'▲':'▼') : ''}</th>
             </tr>
@@ -88,7 +104,12 @@ export default function Leaderboard() {
                       <div className="text-base font-semibold">{medal || `#${rank}`}</div>
                     </div>
                   </td>
-                  <td className="p-2">
+                  <td className="p-2 pr-1">
+                    <div className="truncate max-w-xs text-sm text-brand-brown/80" title={row.displayName || ''}>
+                      {row.displayName || '-'}
+                    </div>
+                  </td>
+                  <td className="p-2 pl-1">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="truncate max-w-xs" title={row.accountId}>
                         {truncateAcc(row.accountId)}
@@ -104,7 +125,7 @@ export default function Leaderboard() {
             })}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={4} className="p-6">
+                <td colSpan={5} className="p-6">
                   <div className="text-sm text-brand-brown/60">No leaderboard entries</div>
                 </td>
               </tr>
