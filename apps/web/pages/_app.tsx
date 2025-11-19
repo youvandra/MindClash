@@ -47,7 +47,7 @@ export default function App({ Component, pageProps }: AppProps) {
           <div className="nav-inner">
             <Link href="/" className="brand">
               <span className="brand-dot" />
-              <span>MindClash</span>
+              <span>Clash of Knowledge</span>
             </Link>
             <div className="flex items-center gap-3">
               <div className="nav-links">
