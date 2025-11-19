@@ -51,10 +51,8 @@ export default function App({ Component, pageProps }: AppProps) {
             </Link>
             <div className="flex items-center gap-3">
               <div className="nav-links">
-                <Link href="/packs" className={`nav-link ${router.pathname.startsWith('/packs')?'bg-brand-cream':''}`}>Packs</Link>
                 <Link href="/arena" className={`nav-link ${router.pathname.startsWith('/arena')?'bg-brand-cream':''}`}>Arena</Link>
                 <Link href="/marketplace" className={`nav-link ${router.pathname.startsWith('/marketplace')?'bg-brand-cream':''}`}>Marketplace</Link>
-                <Link href="/playground" className={`nav-link ${router.pathname.startsWith('/playground')?'bg-brand-cream':''}`}>Playground</Link>
                 <Link href="/leaderboard" className={`nav-link ${router.pathname.startsWith('/leaderboard')?'bg-brand-cream':''}`}>Leaderboard</Link>
               </div>
               <div className="relative">
@@ -71,7 +69,9 @@ export default function App({ Component, pageProps }: AppProps) {
                 {menuOpen && (
                   <div className="absolute right-0 mt-2 card p-2 w-44">
                     <Link href="/profile" className="btn-ghost btn-sm w-full" onClick={()=> setMenuOpen(false)}>Profile</Link>
-                    <button className="btn-ghost btn-sm w-full" onClick={handleDisconnect}>Disconnect</button>
+                    <Link href="/packs" className="btn-ghost btn-sm w-full" onClick={()=> setMenuOpen(false)}>Packs</Link>
+                    <Link href="/playground" className="btn-ghost btn-sm w-full" onClick={()=> setMenuOpen(false)}>Playground</Link>
+                    <button className="btn-danger btn-sm w-full" onClick={handleDisconnect}>Disconnect</button>
                   </div>
                 )}
               </div>
