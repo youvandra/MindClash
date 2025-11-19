@@ -72,7 +72,7 @@ export default function Playground() {
   return (
     <div className="page py-8 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">{header}</h2>
+        <h2 className="text-2xl font-bold truncate">{header}</h2>
         {!selTitles.length && <div className="text-sm text-brand-brown/60">Add knowledge to start chatting</div>}
       </div>
 
@@ -122,7 +122,7 @@ export default function Playground() {
       <div className="card p-4 flex flex-col gap-3 h-[60vh]">
         <div className="flex items-center justify-between">
           <div className="flex flex-wrap gap-2">
-            {selTitles.map(s => (
+            {selTitles.slice(0,3).map(s => (
               <span key={`${s.type}-${s.id}`} className="badge inline-flex items-center gap-2">
                 <span className="truncate max-w-[12rem]" title={s.title}>{s.title}</span>
                 <button className="btn-ghost btn-compact btn-sm" onClick={()=>{
@@ -132,6 +132,9 @@ export default function Playground() {
                 }}>×</button>
               </span>
             ))}
+            {selTitles.length > 3 && (
+              <span className="badge">{selTitles.length - 3}+ more</span>
+            )}
           </div>
           <div>
             <button className="btn-outline btn-sm" onClick={()=>{ setSelOwned([]); setSelRented([]); setSelTitles([]); setMessages([]) }}>Clear</button>

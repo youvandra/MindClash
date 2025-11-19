@@ -54,7 +54,7 @@ export default function MarketplaceChat() {
   return (
     <div className="page py-8 space-y-4">
       <div>
-        <h2 className="text-2xl font-bold">{title ? `Chat with ${title}` : 'Chat'}</h2>
+        <h2 className="text-2xl font-bold truncate">{title ? `Chat with ${title}` : 'Chat'}</h2>
         <div className="text-sm text-brand-brown/60">Answers are strictly based on the selected knowledge pack.</div>
       </div>
       <div className="card p-4 flex flex-col gap-3 h-[70vh]">
