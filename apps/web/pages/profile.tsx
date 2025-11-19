@@ -11,6 +11,8 @@ export default function Profile() {
   const [knowledgeCount, setKnowledgeCount] = useState<number>(0)
   const [status, setStatus] = useState('')
   const [toasts, setToasts] = useState<{ id: string; text: string; kind: 'success'|'error'|'info' }[]>([])
+  const [cokBalance, setCokBalance] = useState<string>('')
+  const [cokLoading, setCokLoading] = useState<boolean>(false)
 
   useEffect(() => {
     const acc = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
@@ -39,6 +41,25 @@ export default function Profile() {
         const me = (Array.isArray(lb) ? lb : []).find((x: any) => String(x.accountId) === acc)
         setElo(Number(me?.elo || 0))
       } catch {}
+      try {
+        setCokLoading(true)
+        const network = process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet'
+        const base = network === 'mainnet' ? 'https://mainnet.mirrornode.hedera.com' : 'https://testnet.mirrornode.hedera.com'
+        const url = `${base}/api/v1/accounts/${encodeURIComponent(acc)}/tokens?token.id=0.0.7284519`
+        const r = await fetch(url)
+        const j = await r.json()
+        const tokens = Array.isArray(j?.tokens) ? j.tokens : []
+        const rel = tokens.find((t: any) => String(t?.token_id) === '0.0.7284519')
+        if (rel && typeof rel.balance === 'number') {
+          const decimals = typeof rel.decimals === 'number' ? rel.decimals : 0
+          const human = decimals > 0 ? (rel.balance / Math.pow(10, decimals)) : rel.balance
+          setCokBalance(String(human))
+        } else {
+          setCokBalance('0')
+        }
+      } catch {
+        setCokBalance('')
+      } finally { setCokLoading(false) }
     })()
   }, [])
 
@@ -103,9 +124,19 @@ export default function Profile() {
             <button className={`btn-secondary ${saving ? 'bg-gray-200 text-gray-500 hover:bg-gray-200 cursor-not-allowed' : ''}`} onClick={handleSaveName} disabled={saving}>Save</button>
           </div>
         </div>
-        <div className="card p-4 space-y-2">
-          <div className="label">Account ID</div>
-          <div className="font-mono text-sm">{accountId || '-'}</div>
+        <div className="card p-4 space-y-3">
+          <div className="label">Account</div>
+          <div className="flex items-center justify-between">
+            <div className="font-mono text-sm">{accountId || '-'}</div>
+            <span className="badge bg-white border text-brand-brown/80">Hedera</span>
+          </div>
+          <div className="space-y-1">
+            <div className="label">$COK Token</div>
+            <div className="flex items-baseline gap-2">
+              <div className="text-2xl font-bold">{cokLoading ? 'Loading…' : (cokBalance || '0')}</div>
+              <span className="badge font-mono">0.0.7284519</span>
+            </div>
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
