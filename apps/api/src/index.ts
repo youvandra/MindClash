@@ -27,6 +27,160 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({ ok: true, supabase: persistenceInfo.useSupabase })
 })
 
+app.post('/custodial/create', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ userId: z.string(), email: z.string().optional(), provider: z.string().optional() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const network = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
+    const tokenIdStr = process.env.COK_TOKEN_ID || '0.0.7284519'
+    const treasuryIdStr = process.env.COK_TREASURY_ACCOUNT_ID
+    const treasuryKeyStr = process.env.COK_TREASURY_PRIVATE_KEY
+    if (!treasuryIdStr || !treasuryKeyStr) return res.status(500).json({ error: 'Server not configured for custodial' })
+    const sdk = await import('@hashgraph/sdk')
+    const { Client, AccountId, PrivateKey, PublicKey, TokenId, Hbar, AccountCreateTransaction, TokenAssociateTransaction } = sdk as any
+    const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet()
+    const treSrc = String(treasuryKeyStr || '')
+    const treasuryId = AccountId.fromString(treasuryIdStr)
+    const treasuryKey = PrivateKey.fromStringECDSA(treSrc)
+    client.setOperator(treasuryId, treasuryKey)
+
+    const accountKey = PrivateKey.generateECDSA()
+    const pub = accountKey.publicKey
+    const txCreate = new AccountCreateTransaction()
+      .setKey(pub)
+      .setInitialBalance(new Hbar(1))
+    const submitCreate = await txCreate.execute(client)
+    const receiptCreate = await submitCreate.getReceipt(client)
+    const newAccountId = receiptCreate.accountId?.toString()
+    if (!newAccountId) return res.status(500).json({ error: 'Account creation failed' })
+
+    const tokenId = TokenId.fromString(tokenIdStr)
+    const txAssoc = new TokenAssociateTransaction()
+      .setAccountId(AccountId.fromString(newAccountId))
+      .setTokenIds([tokenId])
+      .freezeWith(client)
+    const signAssoc = await txAssoc.sign(accountKey)
+    const submitAssoc = await signAssoc.execute(client)
+    const receiptAssoc = await submitAssoc.getReceipt(client)
+    if (String(receiptAssoc.status) !== 'SUCCESS') {
+      return res.status(500).json({ error: `Association failed: ${String(receiptAssoc.status)}` })
+    }
+
+    const saved = await db.upsertCustodialWallet({
+      user_id: parsed.data.userId,
+      email: parsed.data.email,
+      provider: parsed.data.provider || 'google',
+      account_id: newAccountId,
+      private_key: `0x${accountKey.toStringRaw()}`,
+      public_key: `0x${pub.toStringRaw()}`
+    })
+    res.json({ accountId: newAccountId, associated: true, wallet: saved })
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
+app.post('/custodial/associate', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ userId: z.string() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const network = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
+    const tokenIdStr = process.env.COK_TOKEN_ID || '0.0.7284519'
+    const treasuryIdStr = process.env.COK_TREASURY_ACCOUNT_ID
+    const treasuryKeyStr = process.env.COK_TREASURY_PRIVATE_KEY
+    if (!treasuryIdStr || !treasuryKeyStr) return res.status(500).json({ error: 'Server not configured for custodial' })
+    const cw = await db.getCustodialWalletByUserId(parsed.data.userId)
+    if (!cw || !cw.account_id || !cw.private_key) return res.status(404).json({ error: 'Custodial wallet not found or missing key' })
+    const sdk = await import('@hashgraph/sdk')
+    const { Client, AccountId, PrivateKey, TokenId, TokenAssociateTransaction } = sdk as any
+    const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet()
+    const treSrc = String(treasuryKeyStr || '')
+    const treasuryId = AccountId.fromString(treasuryIdStr)
+    const treasuryKey = PrivateKey.fromStringECDSA(treSrc)
+    client.setOperator(treasuryId, treasuryKey)
+    const accountId = AccountId.fromString(String(cw.account_id))
+    const privSrc = String(cw.private_key)
+    const privHex = privSrc.startsWith('0x') ? privSrc.slice(2) : privSrc
+    const accountKey = PrivateKey.fromStringECDSA(privHex)
+    const tokenId = TokenId.fromString(tokenIdStr)
+    const txAssoc = new TokenAssociateTransaction()
+      .setAccountId(accountId)
+      .setTokenIds([tokenId])
+      .freezeWith(client)
+    const signAssoc = await txAssoc.sign(accountKey)
+    const submitAssoc = await signAssoc.execute(client)
+    const receiptAssoc = await submitAssoc.getReceipt(client)
+    if (String(receiptAssoc.status) !== 'SUCCESS') {
+      return res.status(500).json({ error: `Association failed: ${String(receiptAssoc.status)}` })
+    }
+    res.json({ associated: true, accountId: accountId.toString() })
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
+app.post('/custodial/ensure', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ userId: z.string(), email: z.string().optional(), provider: z.string().optional() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const network = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
+    const tokenIdStr = process.env.COK_TOKEN_ID || '0.0.7284519'
+    const treasuryIdStr = process.env.COK_TREASURY_ACCOUNT_ID
+    const treasuryKeyStr = process.env.COK_TREASURY_PRIVATE_KEY
+    if (!treasuryIdStr || !treasuryKeyStr) return res.status(500).json({ error: 'Server not configured for custodial' })
+    const sdk = await import('@hashgraph/sdk')
+    const { Client, AccountId, PrivateKey, TokenId, TokenAssociateTransaction, Hbar, AccountCreateTransaction } = sdk as any
+    const client = network === 'mainnet' ? Client.forMainnet() : Client.forTestnet()
+    const treSrc = String(treasuryKeyStr || '')
+    const treasuryId = AccountId.fromString(treasuryIdStr)
+    const treasuryKey = PrivateKey.fromStringECDSA(treSrc)
+    client.setOperator(treasuryId, treasuryKey)
+
+    let cw = await db.getCustodialWalletByUserId(parsed.data.userId)
+    if (!cw) {
+      const accountKey = PrivateKey.generateECDSA()
+      const pub = accountKey.publicKey
+      const txCreate = new AccountCreateTransaction()
+        .setKey(pub)
+        .setInitialBalance(new Hbar(1))
+      const submitCreate = await txCreate.execute(client)
+      const receiptCreate = await submitCreate.getReceipt(client)
+      const newAccountId = receiptCreate.accountId?.toString()
+      if (!newAccountId) return res.status(500).json({ error: 'Account creation failed' })
+      cw = await db.upsertCustodialWallet({ user_id: parsed.data.userId, email: parsed.data.email, provider: parsed.data.provider || 'google', account_id: newAccountId, private_key: `0x${accountKey.toStringRaw()}`, public_key: `0x${pub.toStringRaw()}` })
+    }
+
+    const accountId = AccountId.fromString(String(cw.account_id))
+    const tokenId = TokenId.fromString(tokenIdStr)
+    const privSrc = String(cw.private_key || '')
+    const privHex = privSrc.startsWith('0x') ? privSrc.slice(2) : privSrc
+    const accountKey = PrivateKey.fromStringECDSA(privHex)
+
+    try {
+      const txAssoc = new TokenAssociateTransaction()
+        .setAccountId(accountId)
+        .setTokenIds([tokenId])
+        .freezeWith(client)
+      const signAssoc = await txAssoc.sign(accountKey)
+      const submitAssoc = await signAssoc.execute(client)
+      const receiptAssoc = await submitAssoc.getReceipt(client)
+      if (String(receiptAssoc.status) !== 'SUCCESS' && String(receiptAssoc.status) !== 'TOKEN_ALREADY_ASSOCIATED') {
+        return res.status(500).json({ error: `Association failed: ${String(receiptAssoc.status)}` })
+      }
+    } catch (e: any) {
+      const msg = String(e?.message || '')
+      if (!msg.includes('TOKEN_ALREADY_ASSOCIATED')) return res.status(500).json({ error: msg || 'Association error' })
+    }
+
+    res.json({ accountId: accountId.toString(), associated: true, wallet: cw })
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
 app.post('/knowledge-packs', async (req: Request, res: Response) => {
   const schema = z.object({ title: z.string(), content: z.string(), ownerAccountId: z.string().optional() })
   const parsed = schema.safeParse(req.body)
@@ -236,6 +390,55 @@ app.post('/arenas', async (req: Request, res: Response) => {
     res.json(arena)
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
+app.post('/tokens/mint-cok', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ accountId: z.string(), tinyAmount: z.number().int().positive().optional() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const network = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
+    const tokenIdStr = process.env.COK_TOKEN_ID || '0.0.7284519'
+    const treasuryIdStr = process.env.COK_TREASURY_ACCOUNT_ID
+    const treasuryKeyStr = process.env.COK_TREASURY_PRIVATE_KEY
+    const supplyKeyStr = process.env.COK_SUPPLY_PRIVATE_KEY || treasuryKeyStr
+    if (!treasuryIdStr || !treasuryKeyStr) return res.status(500).json({ error: 'Server not configured for minting' })
+    const tinyAmountEnv = Number(process.env.COK_MINT_TINY_AMOUNT || '0')
+    const tinyAmount = parsed.data.tinyAmount && parsed.data.tinyAmount > 0 ? parsed.data.tinyAmount : (tinyAmountEnv > 0 ? tinyAmountEnv : 0)
+    if (!tinyAmount) return res.status(400).json({ error: 'Missing mint amount (tiny units)' })
+
+    const sdk = await import('@hashgraph/sdk')
+    const { Client, AccountId, PrivateKey, TokenId, TransferTransaction, TokenMintTransaction } = sdk as any
+    const client = Client.forTestnet()
+    const treasuryId = AccountId.fromString(treasuryIdStr)
+    const treSrc = String(treasuryKeyStr || '')
+    const treasuryKey = PrivateKey.fromStringECDSA(treSrc)
+    const supplyKeySrc = String(supplyKeyStr || '')
+    const derHex = supplyKeySrc.startsWith('0x') ? supplyKeySrc.slice(2) : supplyKeySrc
+    const supplyKey = PrivateKey.fromStringDer(derHex)
+    client.setOperator(treasuryId, treasuryKey)
+    const tokenId = TokenId.fromString(tokenIdStr)
+
+    const txMint = await new TokenMintTransaction()
+      .setTokenId(tokenId)
+      .setAmount(tinyAmount)
+      .freezeWith(client)
+      .sign(supplyKey)
+    const submitMint = await txMint.execute(client)
+    const receiptMint = await submitMint.getReceipt(client)
+    if (String(receiptMint.status) !== 'SUCCESS') {
+      return res.status(500).json({ error: `Mint failed: ${String(receiptMint.status)}` })
+    }
+
+    const tx = new TransferTransaction()
+      .addTokenTransfer(tokenId, treasuryId, -tinyAmount)
+      .addTokenTransfer(tokenId, AccountId.fromString(parsed.data.accountId), tinyAmount)
+    const submit = await tx.execute(client)
+    const receipt = await submit.getReceipt(client)
+    return res.json({ status: String(receipt.status), transactionId: submit.transactionId.toString(), mintStatus: String(receiptMint.status), mintTransactionId: submitMint.transactionId.toString() })
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'Server error' })
   }
 })
 

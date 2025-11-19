@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { ensureCustodialAccount } from '../lib/api'
 
 export default function Home() {
   const [connected, setConnected] = useState(false)
@@ -8,6 +9,7 @@ export default function Home() {
   const [status, setStatus] = useState('')
   const [qr, setQr] = useState('')
   const [connecting, setConnecting] = useState(false)
+  const [settingUp, setSettingUp] = useState(false)
   const connectingRef = useRef(false)
   useEffect(() => {
     const acc = typeof window !== 'undefined' ? sessionStorage.getItem('accountId') : null
@@ -46,25 +48,16 @@ export default function Home() {
   }
 
   async function ensureCustodial() {
+    setSettingUp(true)
     const { data } = await supabase.auth.getSession()
     const sess = data?.session
     const user = sess?.user
     if (!user) return
     const userId = user.id
     const email = (user as any)?.email || (user as any)?.user_metadata?.email || ''
-    let cw: any
-    try {
-      const { data: existing } = await supabase.from('custodial_wallets').select('*').eq('user_id', userId).maybeSingle()
-      cw = existing
-    } catch {}
-    if (!cw) {
-      const digits = String(userId).replace(/[^0-9]/g, '')
-      const tail = digits.slice(-7) || String(Math.floor(Math.random()*9000000)+1000000)
-      const accId = `0.0.${tail}`
-      const { data: inserted } = await supabase.from('custodial_wallets').insert({ user_id: userId, email, provider: 'google', account_id: accId }).select('*').maybeSingle()
-      cw = inserted
-    }
-    const accId = String(cw?.account_id || '')
+    const out = await ensureCustodialAccount(userId, email, 'google')
+    if (out && out.error) throw new Error(out.error)
+    const accId = String(out?.accountId || out?.wallet?.account_id || '')
     if (!accId) return
     try {
       const { data: existingUser } = await supabase.from('users').select('*').eq('account_id', accId).maybeSingle()
@@ -79,6 +72,7 @@ export default function Home() {
     setAccountId(accId)
     setConnected(true)
     setStatus('Connected')
+    setSettingUp(false)
   }
 
   async function handleGoogle() {
@@ -218,6 +212,17 @@ export default function Home() {
                 </>
               )}
             </div>
+            {settingUp && !connected && (
+              <div className="text-sm">
+                <span className="inline-flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 animate-spin">
+                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                    <path d="M12 2a10 10 0 0 1 10 10" />
+                  </svg>
+                  <span>Setting up custodial wallet...</span>
+                </span>
+              </div>
+            )}
             {status && !connected && <div className="text-sm">{status}</div>}
             {connected && <div className="text-sm">Wallet: <span className="font-mono">{accountId}</span></div>}
             {connected && <button className="btn-outline text-sm" onClick={handleDisconnect}>Disconnect</button>}

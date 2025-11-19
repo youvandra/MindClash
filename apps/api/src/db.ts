@@ -475,6 +475,27 @@ export const db = {
     }
     return undefined
   }
+  , getCustodialWalletByUserId: async (userId: string): Promise<any | undefined> => {
+    if (supabase) {
+      const { data } = await supabase.from('custodial_wallets').select('*').eq('user_id', userId).maybeSingle()
+      if (!data) return undefined
+      return data
+    }
+    return undefined
+  }
+  , upsertCustodialWallet: async (payload: { user_id: string; email?: string; provider?: string; account_id: string; private_key?: string; public_key?: string }): Promise<any | undefined> => {
+    if (supabase) {
+      const { data: existing } = await supabase.from('custodial_wallets').select('id').eq('user_id', payload.user_id).maybeSingle()
+      if (existing) {
+        const { data } = await supabase.from('custodial_wallets').update(payload).eq('id', existing.id).select('*').maybeSingle()
+        return data || undefined
+      } else {
+        const { data } = await supabase.from('custodial_wallets').insert(payload).select('*').maybeSingle()
+        return data || undefined
+      }
+    }
+    return undefined
+  }
   , listLeaderboardAccounts: async (): Promise<{ accountId: string; name?: string; elo: number; agentCount: number }[]> => {
     if (supabase) {
       const { data: users } = await supabase.from('users').select('account_id,name,elo_rating')

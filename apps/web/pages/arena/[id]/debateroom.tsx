@@ -297,7 +297,7 @@ export function RoundModal({ open, onClose, roundLabel, prosText, consText, prog
   if (!open) return null
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={e => e.stopPropagation()}>
+      <div className="round-modal-card" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div className="font-semibold">{roundLabel || '-'}</div>
           <button className="btn-outline btn-sm" onClick={onClose}>Close</button>

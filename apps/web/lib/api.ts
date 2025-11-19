@@ -221,6 +221,62 @@ export async function saveArenaDraft(id: string, accountId: string, agentName?: 
   }
 }
 
+export async function mintCokToken(accountId: string, tinyAmount?: number) {
+  const r = await fetch(`${API_URL}/tokens/mint-cok`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId, tinyAmount })
+  })
+  const text = await r.text()
+  try {
+    return JSON.parse(text || '{}')
+  } catch {
+    return { ok: r.ok, status: r.status }
+  }
+}
+
+export async function createCustodialAccount(userId: string, email?: string, provider?: string) {
+  const r = await fetch(`${API_URL}/custodial/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, email, provider })
+  })
+  const text = await r.text()
+  try {
+    return JSON.parse(text || '{}')
+  } catch {
+    return { ok: r.ok, status: r.status }
+  }
+}
+
+export async function associateCustodialAccount(userId: string) {
+  const r = await fetch(`${API_URL}/custodial/associate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId })
+  })
+  const text = await r.text()
+  try {
+    return JSON.parse(text || '{}')
+  } catch {
+    return { ok: r.ok, status: r.status }
+  }
+}
+
+export async function ensureCustodialAccount(userId: string, email?: string, provider?: string) {
+  const r = await fetch(`${API_URL}/custodial/ensure`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, email, provider })
+  })
+  const text = await r.text()
+  try {
+    return JSON.parse(text || '{}')
+  } catch {
+    return { ok: r.ok, status: r.status }
+  }
+}
+
 export async function cancelArena(id: string, reason?: string) {
   const r = await fetch(`${API_URL}/arenas/cancel`, {
     method: 'POST',

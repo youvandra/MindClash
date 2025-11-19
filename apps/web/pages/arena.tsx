@@ -21,6 +21,16 @@ export default function Arena() {
   const [watchLimit, setWatchLimit] = useState<number>(3)
   const pollingRef = useRef<any>(null)
   const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
+  function statusBadge(statusText: string) {
+    const s = String(statusText || '').toLowerCase()
+    if (s === 'completed') return 'bg-green-100 text-green-800'
+    if (s === 'cancelled') return 'bg-red-100 text-red-800'
+    if (s === 'matching') return 'bg-blue-100 text-blue-800'
+    if (s === 'select_agent') return 'bg-yellow-100 text-yellow-800'
+    if (s === 'challenge' || s === 'writing') return 'bg-purple-100 text-purple-800'
+    if (s === 'waiting' || s === 'ready') return 'bg-yellow-100 text-yellow-800'
+    return 'bg-gray-100 text-gray-800'
+  }
 
   useEffect(() => {
     const accRaw = typeof window !== 'undefined' ? sessionStorage.getItem('accountId') : null
@@ -53,61 +63,71 @@ export default function Arena() {
       </div>
       <div className="space-y-2">
         <h3 className="text-xl font-semibold">My Arena</h3>
-        <div className="grid grid-cols-1 gap-3">
-          {myArenas.slice(0, myLimit).map((a: any) => {
-            const statusText = String(a.status||'').toLowerCase()
-            const statusColor = statusText === 'completed' ? 'bg-green-100 text-green-800' : statusText === 'cancelled' ? 'bg-red-100 text-red-800' : statusText === 'matching' ? 'bg-blue-100 text-blue-800' : statusText === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
-            const isCreator = a.creator_account_id === accId
-            const isJoiner = a.joiner_account_id === accId
-            const titleText = (String(a.topic||'').length > 60) ? (String(a.topic||'').slice(0, 60) + '…') : String(a.topic||'')
-            return (
-              <div key={a.id} className="card p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <a href={`/arena/${a.id}`} className="block">
-                      <div className="text-sm text-brand-brown/60">Code <span className="font-mono">{a.code || '-'}</span></div>
-                      <div className="text-lg font-semibold" title={a.topic}>{titleText}</div>
-                    </a>
-                    <div className="flex items-center gap-2">
-                      <span className="badge bg-white border text-brand-brown/80">{a.game_type === 'challenge' ? 'Challenge' : 'Import'}</span>
-                      <span className={`badge ${statusColor}`}>{a.status}</span>
+        {myArenas.length === 0 ? (
+          <div className="card p-4 shadow-sm">
+            <div className="text-center text-gray-500">Your arenas not available.</div>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-3">
+              {myArenas.slice(0, myLimit).map((a: any) => {
+                const statusText = String(a.status||'').toLowerCase()
+                const statusColor = statusBadge(statusText)
+                const isCreator = a.creator_account_id === accId
+                const isJoiner = a.joiner_account_id === accId
+                const titleText = (String(a.topic||'').length > 60) ? (String(a.topic||'').slice(0, 60) + '…') : String(a.topic||'')
+                return (
+                  <div key={a.id} className="card p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <a href={`/arena/${a.id}`} className="block">
+                          <div className="text-sm text-brand-brown/60">Code <span className="font-mono">{a.code || '-'}</span></div>
+                          <div className="text-lg font-semibold" title={a.topic}>{titleText}</div>
+                        </a>
+                        <div className="flex items-center gap-2">
+                          <span className="badge bg-white border text-brand-brown/80">{a.game_type === 'challenge' ? 'Challenge' : 'Import'}</span>
+                          <span className={`badge ${statusColor}`}>{a.status}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <a className="btn-outline" href={`/arena/${a.id}`}>Open</a>
+                        {isCreator && a.status !== 'completed' && (
+                          <button aria-label="Delete Arena" className="btn-outline text-red-600 border-red-600 hover:bg-red-50 h-10" onClick={async () => {
+                            await deleteArena(a.id, accId)
+                            const updated = await listArenas(accId)
+                            setMyArenas(updated)
+                          }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M9 6V4h6v2m1 2-1 12a2 2 0 01-2 2H8a2 2 0 01-2-2L5 8m4 4v6m6-6v6" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <a className="btn-outline" href={`/arena/${a.id}`}>Open</a>
-                    {isCreator && a.status !== 'completed' && (
-                      <button aria-label="Delete Arena" className="btn-outline text-red-600 border-red-600 hover:bg-red-50 h-10" onClick={async () => {
-                        await deleteArena(a.id, accId)
-                        const updated = await listArenas(accId)
-                        setMyArenas(updated)
-                      }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M9 6V4h6v2m1 2-1 12a2 2 0 01-2 2H8a2 2 0 01-2-2L5 8m4 4v6m6-6v6" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
+                )
+              })}
+            </div>
+            {myArenas.length > myLimit && (
+              <div className="flex justify-center mt-2">
+                <button className="btn-outline" onClick={()=> setMyLimit(l => Math.min(l+3, myArenas.length))}>Load More</button>
               </div>
-            )
-          })}
-        </div>
-        {myArenas.length > myLimit && (
-          <div className="flex justify-center mt-2">
-            <button className="btn-outline" onClick={()=> setMyLimit(l => Math.min(l+3, myArenas.length))}>Load More</button>
-          </div>
+            )}
+          </>
         )}
       </div>
       <div className="space-y-2">
         <h3 className="text-xl font-semibold">(Watch-only) Arena</h3>
         {watchArenas.length === 0 ? (
-          <div className="text-sm text-brand-brown/60">Watch-only arenas not available.</div>
+          <div className="card p-4 shadow-sm">
+              <div className="text-center text-gray-500">Watch-only arenas not available.</div>
+          </div>
         ) : (
           <>
           <div className="grid grid-cols-1 gap-3">
             {(Array.isArray(watchArenas) ? watchArenas : []).slice(0, watchLimit).map((a: any) => {
               const statusText = String(a.status||'').toLowerCase()
-              const statusColor = statusText === 'completed' ? 'bg-green-100 text-green-800' : statusText === 'cancelled' ? 'bg-red-100 text-red-800' : statusText === 'matching' ? 'bg-blue-100 text-blue-800' : statusText === 'waiting' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
+              const statusColor = statusBadge(statusText)
               const titleText = (String(a.topic||'').length > 60) ? (String(a.topic||'').slice(0, 60) + '…') : String(a.topic||'')
               return (
                 <div key={a.id} className="card p-4 shadow-sm">
