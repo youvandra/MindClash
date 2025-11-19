@@ -5,6 +5,7 @@ export type KnowledgePack = {
   title: string
   content: string
   createdAt: number
+  ownerAccountId?: string
 }
 
 export type Agent = {

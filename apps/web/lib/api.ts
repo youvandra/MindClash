@@ -6,6 +6,31 @@ export async function listKnowledgePacks(accountId?: string) {
   return r.json()
 }
 
+export async function listMarketplaceListings() {
+  const r = await fetch(`${API_URL}/marketplace/listings`)
+  return r.json()
+}
+
+export async function createMarketplaceListing(knowledgePackId: string, ownerAccountId: string) {
+  const r = await fetch(`${API_URL}/marketplace/listings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ knowledgePackId, ownerAccountId })
+  })
+  const data = await r.json()
+  if (!r.ok || data.error) throw new Error(data.error || 'Create listing failed')
+  return data
+}
+
+export async function chatMarketplace(listingId: string, messages: { role: 'user'|'assistant', content: string }[]) {
+  const r = await fetch(`${API_URL}/marketplace/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ listingId, messages })
+  })
+  return r.json()
+}
+
 export async function createKnowledgePack(title: string, content: string, ownerAccountId?: string) {
   const r = await fetch(`${API_URL}/knowledge-packs`, {
     method: 'POST',

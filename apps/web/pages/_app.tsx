@@ -53,6 +53,7 @@ export default function App({ Component, pageProps }: AppProps) {
               <div className="nav-links">
                 <Link href="/packs" className={`nav-link ${router.pathname.startsWith('/packs')?'bg-brand-cream':''}`}>Packs</Link>
                 <Link href="/arena" className={`nav-link ${router.pathname.startsWith('/arena')?'bg-brand-cream':''}`}>Arena</Link>
+                <Link href="/marketplace" className={`nav-link ${router.pathname.startsWith('/marketplace')?'bg-brand-cream':''}`}>Marketplace</Link>
                 <Link href="/leaderboard" className={`nav-link ${router.pathname.startsWith('/leaderboard')?'bg-brand-cream':''}`}>Leaderboard</Link>
               </div>
               <div className="relative">

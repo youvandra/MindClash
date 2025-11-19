@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listKnowledgePacks, createKnowledgePack, updateKnowledgePack, listAgents, createAgent, updateAgent, addAgentKnowledge, removeAgentKnowledge } from '../lib/api'
+import { listKnowledgePacks, createKnowledgePack, updateKnowledgePack, listAgents, createAgent, updateAgent, addAgentKnowledge, removeAgentKnowledge, createMarketplaceListing } from '../lib/api'
 
 export default function Packs() {
   const [kpTitle, setKpTitle] = useState('')
@@ -102,7 +102,19 @@ export default function Packs() {
                         ) : (
                           <button className="btn-ghost btn-sm btn-compact" onClick={()=>{ setEditingPackId(p.id); setEditingPackTitle(p.title); setEditingPackContent(p.content); setModal({ type: 'editPack', id: p.id }) }}>Edit</button>
                         )}
-                        
+                        {(() => {
+                          const acc = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
+                          const isOwner = String(p.ownerAccountId || '') === acc
+                          return isOwner ? (
+                            <button className="btn-outline btn-sm btn-compact" onClick={async ()=>{
+                              try {
+                                const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
+                                await createMarketplaceListing(p.id, accId)
+                                pushToast('success','Listed for rent in marketplace')
+                              } catch (e: any) { pushToast('error', e?.message || 'Listing failed') }
+                            }}>Rent</button>
+                          ) : null
+                        })()}
                       </div>
                     </td>
                   </tr>

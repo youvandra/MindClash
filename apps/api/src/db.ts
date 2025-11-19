@@ -39,7 +39,7 @@ export const db = {
       if (ownerAccountId) payload.owner_account_id = ownerAccountId
       const { data, error } = await supabase.from('knowledge_packs').insert(payload).select().single()
       if (error) throw error
-      return { id: data.id, title: data.title, content: data.content, createdAt: new Date(data.created_at).getTime() }
+      return { id: data.id, title: data.title, content: data.content, createdAt: new Date(data.created_at).getTime(), ownerAccountId: data.owner_account_id || undefined }
     }
     const kp: KnowledgePack = { id: id(), title, content, createdAt: Date.now() }
     memory.knowledge.set(kp.id, kp)
@@ -49,7 +49,7 @@ export const db = {
     if (supabase) {
       const { data, error } = await supabase.from('knowledge_packs').select('*').eq('id', kpId).single()
       if (error) return undefined
-      return { id: data.id, title: data.title, content: data.content, createdAt: new Date(data.created_at).getTime() }
+      return { id: data.id, title: data.title, content: data.content, createdAt: new Date(data.created_at).getTime(), ownerAccountId: data.owner_account_id || undefined }
     }
     return memory.knowledge.get(kpId)
   },
@@ -74,11 +74,11 @@ export const db = {
         const uniq = new Map<string, any>()
         for (const p of packs) uniq.set(p.id, p)
         const list = Array.from(uniq.values()).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        return list.map((d: any) => ({ id: d.id, title: d.title, content: d.content, createdAt: new Date(d.created_at).getTime() }))
+        return list.map((d: any) => ({ id: d.id, title: d.title, content: d.content, createdAt: new Date(d.created_at).getTime(), ownerAccountId: d.owner_account_id || undefined }))
       } else {
         const { data, error } = await supabase.from('knowledge_packs').select('*').order('created_at', { ascending: false })
         if (error) throw error
-        return data.map((d: any) => ({ id: d.id, title: d.title, content: d.content, createdAt: new Date(d.created_at).getTime() }))
+        return data.map((d: any) => ({ id: d.id, title: d.title, content: d.content, createdAt: new Date(d.created_at).getTime(), ownerAccountId: d.owner_account_id || undefined }))
       }
     }
     return [...memory.knowledge.values()]
@@ -87,7 +87,7 @@ export const db = {
     if (supabase) {
       const { data, error } = await supabase.from('knowledge_packs').update(values as any).eq('id', kpId).select().single()
       if (error) return undefined
-      return { id: data.id, title: data.title, content: data.content, createdAt: new Date(data.created_at).getTime() }
+      return { id: data.id, title: data.title, content: data.content, createdAt: new Date(data.created_at).getTime(), ownerAccountId: data.owner_account_id || undefined }
     }
     const existing = memory.knowledge.get(kpId)
     if (!existing) return undefined
@@ -312,6 +312,44 @@ export const db = {
       memory.agents.set(aid, updated)
     }
     return existed
+  }
+  , createMarketplaceListing: async (knowledgePackId: string, ownerAccountId: string): Promise<any> => {
+    if (supabase) {
+      const { data, error } = await supabase.from('marketplace_listings').insert({ knowledge_pack_id: knowledgePackId, owner_account_id: ownerAccountId, status: 'active' }).select('*').single()
+      if (error) throw error
+      return data
+    }
+    const listing = { id: id(), knowledge_pack_id: knowledgePackId, owner_account_id: ownerAccountId, status: 'active', created_at: new Date().toISOString() }
+    return listing
+  }
+  , listMarketplaceListings: async (): Promise<any[]> => {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('marketplace_listings')
+        .select('id, knowledge_pack_id, owner_account_id, status, created_at, knowledge_packs(title)')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data || []).map((d: any) => {
+        const kpRel = (d as any).knowledge_packs
+        const kpTitle = Array.isArray(kpRel) ? (kpRel[0]?.title) : (kpRel?.title)
+        return { id: d.id, knowledge_pack_id: d.knowledge_pack_id, owner_account_id: d.owner_account_id, status: d.status, created_at: d.created_at, title: kpTitle || undefined }
+      })
+    }
+    return []
+  }
+  , getMarketplaceListing: async (idStr: string): Promise<any | undefined> => {
+    if (supabase) {
+      const { data } = await supabase
+        .from('marketplace_listings')
+        .select('id, knowledge_pack_id, owner_account_id, status, created_at, knowledge_packs(title)')
+        .eq('id', idStr)
+        .maybeSingle()
+      if (!data) return undefined
+      const kpRel = (data as any).knowledge_packs
+      const kpTitle = Array.isArray(kpRel) ? (kpRel[0]?.title) : (kpRel?.title)
+      return { id: data.id, knowledge_pack_id: data.knowledge_pack_id, owner_account_id: data.owner_account_id, status: data.status, created_at: data.created_at, title: kpTitle || undefined }
+    }
+    return undefined
   }
   , createArena: async (arena: { code: string; topic: string; creatorAccountId: string; gameType?: 'import'|'challenge'; challengeMinutes?: number }): Promise<any> => {
     if (supabase) {
