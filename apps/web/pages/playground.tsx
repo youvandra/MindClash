@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listKnowledgePacks, listMarketplaceListings, getMarketplaceRentalStatus, chatPlayground } from '../lib/api'
+import { listKnowledgePacks, listMarketplaceListings, getMarketplaceRentalStatus, chatPlayground, getMarketplaceListing } from '../lib/api'
 
 export default function Playground() {
   const [accountId, setAccountId] = useState('')
@@ -41,6 +41,25 @@ export default function Playground() {
       })
       setRented(active)
     }).catch(()=>{}).finally(()=> setLoadingRented(false))
+  }, [accountId])
+
+  useEffect(() => {
+    const parts = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+    const listing = parts?.get('listing') || ''
+    if (!listing || !accountId) return
+    ;(async () => {
+      try {
+        const l = await getMarketplaceListing(listing)
+        const isOwner = String(l?.owner_account_id || '') === String(accountId)
+        if (!isOwner) {
+          const status = await getMarketplaceRentalStatus(listing, accountId)
+          if (!status?.active && Number(l?.price || 0) > 0) return
+        }
+        setSelRented(ids => ids.includes(listing) ? ids : [...ids, listing])
+        const title = String(l?.title || l?.knowledge_pack_id || 'Untitled Knowledge')
+        setSelTitles(ts => ts.some(x => x.type==='rented' && x.id===listing) ? ts : [...ts, { type: 'rented', id: listing, title }])
+      } catch {}
+    })()
   }, [accountId])
 
   useEffect(() => {
