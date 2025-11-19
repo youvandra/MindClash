@@ -52,7 +52,7 @@ export default function Marketplace() {
                 <div className="text-lg font-semibold" title={l.title || l.knowledge_pack_id}>{l.title || 'Untitled Knowledge'}</div>
                 <div className="text-xs text-brand-brown/60">Owner <span className="font-mono">{l.owner_account_id}</span> • {new Date(l.created_at).toLocaleString()}</div>
               </div>
-              <button className="btn-primary" onClick={()=>onChat(l)}>Chat</button>
+              <button className="btn-primary" onClick={()=>onChat(l)}>Rent</button>
             </div>
           </div>
         ))}

@@ -51,6 +51,15 @@ export async function rentMarketplace(listingId: string, renterAccountId: string
   return r.json()
 }
 
+export async function chatKnowledgePack(knowledgePackId: string, accountId: string, messages: { role: 'user'|'assistant', content: string }[]) {
+  const r = await fetch(`${API_URL}/knowledge-packs/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ knowledgePackId, accountId, messages })
+  })
+  return r.json()
+}
+
 export async function createKnowledgePack(title: string, content: string, ownerAccountId?: string) {
   const r = await fetch(`${API_URL}/knowledge-packs`, {
     method: 'POST',

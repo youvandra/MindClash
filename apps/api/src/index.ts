@@ -195,6 +195,29 @@ app.get('/knowledge-packs', async (req: Request, res: Response) => {
   res.json(list)
 })
 
+app.post('/knowledge-packs/chat', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ knowledgePackId: z.string(), accountId: z.string(), messages: z.array(z.object({ role: z.string(), content: z.string() })) })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const kp = await db.getKnowledgePack(parsed.data.knowledgePackId)
+    if (!kp) return res.status(404).json({ error: 'Knowledge not found' })
+    const isOwner = String(kp.ownerAccountId || '') === String(parsed.data.accountId)
+    if (!isOwner) return res.status(403).json({ error: 'Only owner can chat with own knowledge here' })
+    const system = `You are a strictly scoped assistant. You MUST answer using ONLY the content provided under 'Knowledge'. If the answer is not directly supported by that content, reply exactly: "I don't know based on the provided knowledge." Do not use external information. Do not speculate. Quote or paraphrase only from 'Knowledge'.`
+    const agg = kp.content
+    const userLast = parsed.data.messages.slice().reverse().find(m => m.role === 'user')?.content || ''
+    const prompt = `Knowledge:\n${agg}\n---\nInstructions: Answer ONLY with information contained in Knowledge. If insufficient, reply: I don't know based on the provided knowledge.\n---\nUser: ${userLast}`
+    let reply = await generateText(system, prompt)
+    if (!reply || reply.trim().length === 0) {
+      reply = "I don't know based on the provided knowledge."
+    }
+    res.json({ reply })
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
 app.get('/marketplace/listings', async (req: Request, res: Response) => {
   const list = await db.listMarketplaceListings()
   res.json(list)
