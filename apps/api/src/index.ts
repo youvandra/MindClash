@@ -218,6 +218,47 @@ app.post('/knowledge-packs/chat', async (req: Request, res: Response) => {
   }
 })
 
+app.post('/playground/chat', async (req: Request, res: Response) => {
+  try {
+    const schema = z.object({ accountId: z.string(), knowledgePackIds: z.array(z.string()).default([]), listingIds: z.array(z.string()).default([]), messages: z.array(z.object({ role: z.string(), content: z.string() })) })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+    const { accountId, knowledgePackIds, listingIds } = parsed.data
+    const contents: string[] = []
+    for (const kpId of (knowledgePackIds || [])) {
+      const kp = await db.getKnowledgePack(kpId)
+      if (!kp) return res.status(404).json({ error: `Knowledge not found: ${kpId}` })
+      const isOwner = String(kp.ownerAccountId || '') === String(accountId)
+      if (!isOwner) return res.status(403).json({ error: 'Only owner can include own knowledge packs' })
+      contents.push(kp.content)
+    }
+    for (const lid of (listingIds || [])) {
+      const listing = await db.getMarketplaceListing(lid)
+      if (!listing) return res.status(404).json({ error: `Listing not found: ${lid}` })
+      const kp = await db.getKnowledgePack(String(listing.knowledge_pack_id))
+      if (!kp) return res.status(404).json({ error: 'Knowledge not found' })
+      const isOwner = String(listing.owner_account_id) === String(accountId)
+      if (!isOwner) {
+        const rented = await db.getActiveMarketplaceRental(lid, accountId)
+        if (!rented) return res.status(403).json({ error: 'Rental required before including marketplace knowledge' })
+      }
+      contents.push(kp.content)
+    }
+    if (!contents.length) return res.status(400).json({ error: 'No sources selected' })
+    const system = `You are a strictly scoped assistant. You MUST answer using ONLY the content provided under 'Knowledge'. If the answer is not directly supported by that content, reply exactly: "I don't know based on the provided knowledge." Do not use external information. Do not speculate. Quote or paraphrase only from 'Knowledge'.`
+    const agg = contents.join('\n\n---\n')
+    const userLast = parsed.data.messages.slice().reverse().find(m => m.role === 'user')?.content || ''
+    const prompt = `Knowledge:\n${agg}\n---\nInstructions: Answer ONLY with information contained in Knowledge. If insufficient, reply: I don't know based on the provided knowledge.\n---\nUser: ${userLast}`
+    let reply = await generateText(system, prompt)
+    if (!reply || reply.trim().length === 0) {
+      reply = "I don't know based on the provided knowledge."
+    }
+    res.json({ reply })
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
 app.get('/marketplace/listings', async (req: Request, res: Response) => {
   const list = await db.listMarketplaceListings()
   res.json(list)

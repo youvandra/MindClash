@@ -60,6 +60,15 @@ export async function chatKnowledgePack(knowledgePackId: string, accountId: stri
   return r.json()
 }
 
+export async function chatPlayground(accountId: string, ownedIds: string[], listingIds: string[], messages: { role: 'user'|'assistant', content: string }[]) {
+  const r = await fetch(`${API_URL}/playground/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId, knowledgePackIds: ownedIds, listingIds, messages })
+  })
+  return r.json()
+}
+
 export async function createKnowledgePack(title: string, content: string, ownerAccountId?: string) {
   const r = await fetch(`${API_URL}/knowledge-packs`, {
     method: 'POST',
