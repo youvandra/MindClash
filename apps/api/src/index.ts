@@ -848,18 +848,248 @@ app.get('/marketplace/rental-status', async (req: Request, res: Response) => {
 
 app.post('/marketplace/rent', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ listingId: z.string(), renterAccountId: z.string(), minutes: z.number().int().positive() })
+    // -------------------------------
+    // 1. VALIDATION
+    // -------------------------------
+    const schema = z.object({
+      listingId: z.string(),
+      renterAccountId: z.string(),
+      minutes: z.number().int().positive()
+    })
+
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
-    const listing = await db.getMarketplaceListing(parsed.data.listingId)
+
+    const { listingId, renterAccountId, minutes } = parsed.data
+
+    const listing = await db.getMarketplaceListing(listingId)
     if (!listing) return res.status(404).json({ error: 'Listing not found' })
-    if (String(listing.owner_account_id) === String(parsed.data.renterAccountId)) return res.status(400).json({ error: 'Owner cannot rent own listing' })
-    const existing = await db.getActiveMarketplaceRental(parsed.data.listingId, parsed.data.renterAccountId)
+
+    if (String(listing.owner_account_id) === String(renterAccountId))
+      return res.status(400).json({ error: 'Owner cannot rent own listing' })
+
+    const existing = await db.getActiveMarketplaceRental(listingId, renterAccountId)
     if (existing) return res.status(400).json({ error: 'Already rented and active' })
-    const rental = await db.createMarketplaceRental(parsed.data.listingId, parsed.data.renterAccountId, parsed.data.minutes)
-    res.json(rental)
-  } catch (e: any) {
-    res.status(500).json({ error: e?.message || 'Server error' })
+
+    const mins = Math.max(1, Math.floor(minutes))
+    const pricePerMinute = Math.max(0, Math.floor(Number(listing.price || 0)))
+    const totalCharge = Math.max(0, pricePerMinute * mins)
+
+    if (totalCharge <= 0) {
+      const rental = await db.createMarketplaceRental(listingId, renterAccountId, mins)
+      return res.json(rental)
+    }
+
+    // -------------------------------
+    // 2. ENV + CLIENT
+    // -------------------------------
+    const net = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
+    const client = net === 'mainnet'
+      ? HederaClient.forMainnet()
+      : HederaClient.forTestnet()
+
+    const tokenIdStr = String(process.env.COK_TOKEN_ID || '')
+    const tokenId = HederaTokenId.fromString(tokenIdStr)
+
+    const ownerAcct = String(listing.owner_account_id)
+    const renterAcct = String(renterAccountId)
+
+    // -------------------------------
+    // 3. GET TOKEN DECIMALS
+    // -------------------------------
+    let decimals = 8 // fallback safe
+    try {
+      const base = net === 'mainnet'
+        ? 'https://mainnet.mirrornode.hedera.com'
+        : 'https://testnet.mirrornode.hedera.com'
+      const j = await (await fetch(`${base}/api/v1/tokens/${tokenIdStr}`)).json()
+      decimals = Number(j?.decimals || 8)
+    } catch {}
+
+    const toTiny = (v: number) => {
+      const n = Math.round(v * 10 ** decimals)
+      return n <= 0 && v > 0 ? 1 : n
+    }
+
+    // -------------------------------
+    // 4. GET PRIVATE KEY (auto detect)
+    // -------------------------------
+    const cw = await db.getCustodialWalletByAccountId(renterAcct)
+    let pk =
+      cw?.private_key ||
+      (await db.getUserByAccountId(renterAcct))?.private_key ||
+      (await db.getUserByAccountId(renterAcct))?.custodial_private_key ||
+      (await db.getUserByAccountId(renterAcct))?.wallet_private_key ||
+      ''
+
+    let key = null
+    if (pk) {
+      try {
+        if (pk.startsWith('0x')) {
+          key = HederaPrivateKey.fromStringECDSA(pk.slice(2))
+        } else if (pk.startsWith('302e02010030')) {
+          key = HederaPrivateKey.fromStringED25519(pk) // ED25519
+        } else {
+          key = HederaPrivateKey.fromStringECDSA(pk)
+        }
+      } catch (err) {
+        console.error('PrivateKey parse failed:', err)
+      }
+    }
+
+    let paid = false
+
+    // -------------------------------
+    // 5. TRY DIRECT TRANSFER
+    // -------------------------------
+    if (key) {
+      try {
+        // associate
+        try {
+          client.setOperator(renterAcct, key)
+          await new HederaTokenAssociateTransaction()
+            .setAccountId(renterAcct)
+            .setTokenIds([tokenId])
+            .freezeWith(client)
+            .sign(key)
+            .then((tx) => tx.execute(client))
+            .then((r) => r.getReceipt(client))
+        } catch (err) {
+          console.log('association failed (ignore if already associated)')
+        }
+
+        // transfer
+        const tx = new HederaTransferTransaction()
+          .addTokenTransfer(tokenId, renterAcct, -toTiny(totalCharge))
+          .addTokenTransfer(tokenId, ownerAcct, toTiny(totalCharge))
+          .setTransactionId(HederaTransactionId.generate(renterAcct))
+          .freezeWith(client)
+
+        const signed = await tx.sign(key)
+        const submit = await signed.execute(client)
+        const receipt = await submit.getReceipt(client)
+
+        if (String(receipt.status) === 'SUCCESS') paid = true
+      } catch (err) {
+        console.error('Direct transfer failed:', err)
+      }
+    }
+
+    // -------------------------------
+    // 6. FALLBACK: X-PAYMENT HEADER
+    // -------------------------------
+    if (!paid) {
+      const hdr = req.headers['x-payment']
+      let payload = null
+
+      if (hdr) {
+        try {
+          const raw = Array.isArray(hdr) ? hdr[0] : hdr
+          let jsonStr = ''
+          try {
+            jsonStr = Buffer.from(raw, 'base64').toString('utf8')
+          } catch {}
+
+          payload = jsonStr.startsWith('{')
+            ? JSON.parse(jsonStr)
+            : JSON.parse(raw)
+        } catch (err) {
+          console.error('X-PAYMENT parse error:', err)
+          return res.status(402).json({
+            code: 'X402',
+            error: 'Payment required',
+            paymentRequirements: [
+              {
+                scheme: 'exact',
+                network: net === 'mainnet' ? 'hedera-mainnet' : 'hedera-testnet',
+                maxAmountRequired: String(totalCharge),
+                asset: tokenIdStr,
+                resource: 'POST /marketplace/rent',
+                recipients: [{ accountId: ownerAcct, amount: totalCharge }]
+              }
+            ]
+          })
+        }
+      }
+
+      if (payload?.signedTransaction) {
+        try {
+          const bytes = Buffer.from(payload.signedTransaction, 'base64')
+          const txn = HederaTransaction.fromBytes(bytes)
+          const result = await txn.execute(client)
+          const receipt = await result.getReceipt(client)
+          if (String(receipt.status) === 'SUCCESS') paid = true
+        } catch (err) {
+          console.error('X-PAY execute error:', err)
+          return res.status(402).json({ error: 'Payment failed' })
+        }
+      }
+    }
+
+    // -------------------------------
+    // 7. SECOND FALLBACK: APPROVED TRANSFER
+    // -------------------------------
+    if (!paid) {
+      try {
+        const spenderId = process.env.ADDRESS
+        const spenderKey = process.env.COK_TREASURY_PRIVATE_KEY
+
+        let key2 = null
+        if (spenderKey && spenderKey.startsWith('0x')) {
+          key2 = HederaPrivateKey.fromStringECDSA(spenderKey.slice(2))
+        } else if (spenderKey) {
+          key2 = HederaPrivateKey.fromStringECDSA(spenderKey)
+        }
+
+        client.setOperator(HederaAccountId.fromString(spenderId!), key2!)
+
+
+        const tx2 = new HederaTransferTransaction()
+          .addApprovedTokenTransfer(tokenId, renterAcct, -toTiny(totalCharge))
+          .addTokenTransfer(tokenId, ownerAcct, toTiny(totalCharge))
+          .setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(spenderId!)))
+          .freezeWith(client)
+
+        const signed2 = await tx2.sign(key2!)
+        const submit2 = await signed2.execute(client)
+        const rec2 = await submit2.getReceipt(client)
+
+        if (String(rec2.status) === 'SUCCESS') paid = true
+      } catch (err) {
+        console.error('approved fallback failed:', err)
+      }
+    }
+
+    // -------------------------------
+    // 8. STILL NOT PAID → RETURN X402
+    // -------------------------------
+    if (!paid) {
+      return res.status(402).json({
+        code: 'X402',
+        error: 'Payment required',
+        paymentRequirements: [
+          {
+            scheme: 'exact',
+            network: net === 'mainnet' ? 'hedera-mainnet' : 'hedera-testnet',
+            maxAmountRequired: String(totalCharge),
+            asset: tokenIdStr,
+            resource: 'POST /marketplace/rent',
+            recipients: [{ accountId: ownerAcct, amount: totalCharge }],
+            minutes: mins,
+            listingId
+          }
+        ]
+      })
+    }
+
+    // -------------------------------
+    // 9. SUCCESS → CREATE RENTAL
+    // -------------------------------
+    const rental = await db.createMarketplaceRental(listingId, renterAcct, mins)
+    return res.json(rental)
+
+  } catch (err) {
+    console.error(err)
   }
 })
 
