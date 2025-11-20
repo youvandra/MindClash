@@ -117,6 +117,15 @@ export async function prepareX402Transfer(accountId: string, listingIds: string[
   return r.json()
 }
 
+export async function checkX402Allowance(accountId: string, listingIds: string[]) {
+  const r = await fetch(`${API_URL}/x402/check-allowance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId, listingIds })
+  })
+  return r.json()
+}
+
 export async function submitX402Transfer(signedBytesBase64: string, accountId: string, listingIds: string[]) {
   const r = await fetch(`${API_URL}/x402/submit-transfer`, {
     method: 'POST',

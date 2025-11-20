@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { listKnowledgePacks, listMarketplaceListings, getMarketplaceRentalStatus, chatPlayground, getMarketplaceListing, prepareX402Transfer, submitX402Transfer } from '../lib/api'
+import { listKnowledgePacks, listMarketplaceListings, getMarketplaceRentalStatus, chatPlayground, getMarketplaceListing, prepareX402Transfer, submitX402Transfer, checkX402Allowance } from '../lib/api'
 
 export default function Playground() {
   const [accountId, setAccountId] = useState('')
@@ -140,6 +140,21 @@ export default function Playground() {
 
   async function send() {
     if ((!selOwned.length && !selRented.length) || !input) return
+    if (perChatCost > 0) {
+      try {
+        const accUse = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || accountId || '') : (accountId || '')
+        const check = await checkX402Allowance(accUse, selRented)
+        if (!check?.ok) {
+          const decimals = Number(check?.decimals || 0)
+          const toHuman = (tiny: number) => (decimals > 0 ? (tiny / Math.pow(10, decimals)) : tiny)
+          const required = typeof check?.requiredTiny === 'number' ? toHuman(check.requiredTiny) : (check?.amount || perChatCost)
+          const allowed = typeof check?.allowanceTiny === 'number' ? toHuman(check.allowanceTiny) : 0
+          setPaymentNeeded({ amount: required })
+          setMessages(m => [...m, { role: 'assistant', content: `Insufficient allowance. Required ${required} COK, allowance ${allowed} COK to 0.0.6496404. Pay with wallet or approve allowance.` }])
+          return
+        }
+      } catch {}
+    }
     setSending(true)
     const msgs: { role: 'user'|'assistant', content: string }[] = [...messages, { role: 'user', content: input }]
     console.log('playground send', { accountId, owned: selOwned, rented: selRented, messagesCount: msgs.length })
@@ -160,14 +175,14 @@ export default function Playground() {
         setPaymentNeeded({ amount: parsed.amount })
         setMessages(m => [...m, { role: 'assistant', content: parsed.error || 'Payment required' }])
       } else {
-        if (msg.includes('HTTP 402')) {
-          const payload = { accountId, selOwned, selRented, perUse: selRented.map(id => ({ id, pricePerUse: listingMeta[id]?.pricePerUse, ownerId: listingMeta[id]?.ownerId })) }
-          console.warn('x402 client 402 fallback', { payload })
-          setPaymentNeeded({})
-          setMessages(m => [...m, { role: 'assistant', content: 'Payment required' }])
-        } else {
-          setMessages(m => [...m, { role: 'assistant', content: msg }])
-        }
+          if (msg.includes('HTTP 402')) {
+            const payload = { accountId, selOwned, selRented, perUse: selRented.map(id => ({ id, pricePerUse: listingMeta[id]?.pricePerUse, ownerId: listingMeta[id]?.ownerId })) }
+            console.warn('x402 client 402 fallback', { payload })
+            setPaymentNeeded({ amount: perChatCost })
+            setMessages(m => [...m, { role: 'assistant', content: `Payment required. Approve at least ${perChatCost} COK to 0.0.6496404 or pay with wallet.` }])
+          } else {
+            setMessages(m => [...m, { role: 'assistant', content: msg }])
+          }
       }
     }
     setSending(false)

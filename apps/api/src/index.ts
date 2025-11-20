@@ -3,7 +3,7 @@ import express, { Request, Response } from 'express'
 import cors from 'cors'
 import { z } from 'zod'
 import { db, persistenceInfo } from './db'
-import { Client as HederaClient, AccountId as HederaAccountId, Hbar as HederaHbar, TransactionId as HederaTransactionId, TransferTransaction as HederaTransferTransaction, PrivateKey as HederaPrivateKey, TokenId as HederaTokenId, TokenAssociateTransaction as HederaTokenAssociateTransaction, Transaction as HederaTransaction } from '@hashgraph/sdk'
+import { Client as HederaClient, AccountId as HederaAccountId, Hbar as HederaHbar, TransactionId as HederaTransactionId, TransferTransaction as HederaTransferTransaction, PrivateKey as HederaPrivateKey, TokenId as HederaTokenId, TokenAssociateTransaction as HederaTokenAssociateTransaction, Transaction as HederaTransaction, TokenInfoQuery as HederaTokenInfoQuery } from '@hashgraph/sdk'
 import { RoundEntry, RoundName } from './types'
 import { generateText } from './services/openai'
 import { judgeDebate, aggregateJudgeScores, judgeConclusion } from './services/judge'
@@ -280,10 +280,18 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
           const client = hedNet === 'mainnet' ? HederaClient.forMainnet() : HederaClient.forTestnet()
           const tokenIdStr = String(process.env.COK_TOKEN_ID || '')
           const tokenId = HederaTokenId.fromString(tokenIdStr)
+          const base = hedNet === 'mainnet' ? 'https://mainnet.mirrornode.hedera.com' : 'https://testnet.mirrornode.hedera.com'
+          let decimals = 0
+          try {
+            const r = await fetch(`${base}/api/v1/tokens/${encodeURIComponent(tokenIdStr)}`)
+            const j = await r.json()
+            decimals = Number(j?.decimals || 0)
+          } catch {}
+          const toTiny = (v: number) => Math.round(v * Math.pow(10, decimals))
           const tx = new HederaTransferTransaction()
-            .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -totalCharge)
+            .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -toTiny(totalCharge))
           for (const [acct, amt] of Object.entries(charges)) {
-            tx.addTokenTransfer(tokenId, HederaAccountId.fromString(acct), amt)
+            tx.addTokenTransfer(tokenId, HederaAccountId.fromString(acct), toTiny(amt))
           }
           tx.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(accountId)))
           tx.freezeWith(client)
@@ -357,12 +365,20 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
               const client2 = hedNet === 'mainnet' ? HederaClient.forMainnet() : HederaClient.forTestnet()
               const tokenIdStr2 = String(process.env.COK_TOKEN_ID || '')
               const tokenId2 = HederaTokenId.fromString(tokenIdStr2)
+              const base2 = hedNet === 'mainnet' ? 'https://mainnet.mirrornode.hedera.com' : 'https://testnet.mirrornode.hedera.com'
+              let decimals2 = 0
+              try {
+                const r2 = await fetch(`${base2}/api/v1/tokens/${encodeURIComponent(tokenIdStr2)}`)
+                const j2 = await r2.json()
+                decimals2 = Number(j2?.decimals || 0)
+              } catch {}
+              const toTiny2 = (v: number) => Math.round(v * Math.pow(10, decimals2))
               const spenderIdStr = String(process.env.ADDRESS || '')
               const spenderKeyStr = String(process.env.COK_TREASURY_PRIVATE_KEY || '')
               const tx2 = new HederaTransferTransaction()
-                .addApprovedTokenTransfer(tokenId2, HederaAccountId.fromString(accountId), -totalCharge)
+                .addApprovedTokenTransfer(tokenId2, HederaAccountId.fromString(accountId), -toTiny2(totalCharge))
               for (const [acct, amt] of Object.entries(charges)) {
-                tx2.addTokenTransfer(tokenId2, HederaAccountId.fromString(acct), amt)
+                tx2.addTokenTransfer(tokenId2, HederaAccountId.fromString(acct), toTiny2(amt))
               }
               tx2.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(spenderIdStr)))
               tx2.freezeWith(client2)
@@ -470,21 +486,181 @@ app.post('/x402/prepare-transfer', async (req: Request, res: Response) => {
   const client = hedNet === 'mainnet' ? HederaClient.forMainnet() : HederaClient.forTestnet()
   const tokenIdStr = String(process.env.COK_TOKEN_ID || '')
   const tokenId = HederaTokenId.fromString(tokenIdStr)
+  const base3 = hedNet === 'mainnet' ? 'https://mainnet.mirrornode.hedera.com' : 'https://testnet.mirrornode.hedera.com'
+  let decimals = 0
+  try {
+    const r3 = await fetch(`${base3}/api/v1/tokens/${encodeURIComponent(tokenIdStr)}`)
+    const j3 = await r3.json()
+    decimals = Number(j3?.decimals || 0)
+  } catch {}
+  const toTiny = (v: number) => Math.round(v * Math.pow(10, decimals))
   const tx = new HederaTransferTransaction()
-    .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -totalCharge)
+    .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -toTiny(totalCharge))
   for (const [acct, amt] of Object.entries(charges)) {
-    tx.addTokenTransfer(tokenId, HederaAccountId.fromString(acct), amt)
+    tx.addTokenTransfer(tokenId, HederaAccountId.fromString(acct), toTiny(amt))
   }
   tx.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(accountId)))
   tx.freezeWith(client)
   const bytes = tx.toBytes()
   const b64 = Buffer.from(bytes).toString('base64')
   const recipients = Object.entries(charges).map(([acct, amt]) => ({ accountId: acct, amount: amt }))
-  res.json({ bytes: b64, network: netName, amount: totalCharge, asset: tokenIdStr, recipients })
+  res.json({ bytes: b64, network: netName, amount: totalCharge, asset: tokenIdStr, recipients, decimals })
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Server error' })
   }
 })
+
+app.post('/x402/check-allowance', async (req: Request, res: Response) => {
+  try {
+    // validate body
+    const schema = z.object({
+      accountId: z.string(),
+      listingIds: z.array(z.string()).default([])
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const { accountId, listingIds } = parsed.data;
+
+    // network config
+    const hedNet =
+      (process.env.HEDERA_NETWORK ||
+        process.env.NEXT_PUBLIC_HASHPACK_NETWORK ||
+        'testnet').toLowerCase();
+
+    const netName = hedNet === 'mainnet' ? 'hedera-mainnet' : 'hedera-testnet';
+    const base =
+      hedNet === 'mainnet'
+        ? 'https://mainnet.mirrornode.hedera.com'
+        : 'https://testnet.mirrornode.hedera.com';
+
+    const tokenIdStr = String(process.env.COK_TOKEN_ID || '');
+    const spenderIdStr = String(process.env.ADDRESS || '');
+
+    // ---------------------------------------------------------
+    // 1) aggregate listing charges
+    // ---------------------------------------------------------
+    const charges: Record<string, number> = {};
+
+    for (const lid of listingIds || []) {
+      const listing = await db.getMarketplaceListing(lid);
+      if (!listing) continue;
+
+      const owner = String(listing.owner_account_id);
+      const isOwner = owner === String(accountId);
+      const perUse = Math.max(0, Number((listing as any).price_per_use || 0));
+
+      if (!isOwner && perUse > 0) {
+        charges[owner] = (charges[owner] || 0) + perUse;
+      }
+    }
+
+    const totalCharge = Object.values(charges).reduce((a, b) => a + b, 0);
+    if (totalCharge <= 0) {
+      return res.json({
+        ok: true,
+        amount: 0,
+        network: netName,
+        asset: tokenIdStr,
+        recipients: [],
+        allowanceTiny: 0,
+        decimals: 0
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 2) HEDERA CLIENT WITH OPERATOR
+    // ---------------------------------------------------------
+    const operatorId = HederaAccountId.fromString(process.env.COK_TREASURY_ACCOUNT_ID!);
+    const operatorKey = HederaPrivateKey.fromStringECDSA(process.env.COK_TREASURY_PRIVATE_KEY!);
+
+    const client =
+      hedNet === 'mainnet'
+        ? HederaClient.forMainnet()
+        : HederaClient.forTestnet();
+
+    client.setOperator(operatorId, operatorKey);  
+
+    // ---------------------------------------------------------
+    // 3) Query token info (requires operator)
+    // ---------------------------------------------------------
+    const tokenId = HederaTokenId.fromString(tokenIdStr);
+    const info = await new HederaTokenInfoQuery().setTokenId(tokenId).execute(client);
+
+    const decimals = Number(info?.decimals || 0);
+    const toTiny = (v: number) => Math.round(v * Math.pow(10, decimals));
+    const requiredTiny = toTiny(totalCharge);
+
+    // ---------------------------------------------------------
+    // 4) Fetch allowances from MIRROR NODE
+    // ---------------------------------------------------------
+    let allowanceTiny = 0;
+
+    try {
+      const url = `${base}/api/v1/accounts/${encodeURIComponent(
+        accountId
+      )}/allowances/tokens`;
+
+      const r = await fetch(url);
+      const j = await r.json();
+
+      const allowances: any[] = Array.isArray(j?.allowances)
+        ? j.allowances
+        : Array.isArray(j?.token_allowances)
+        ? j.token_allowances
+        : [];
+
+      allowances.forEach((row: any) => {
+        if (row?.token_id !== tokenIdStr) return;
+
+        const rawSpender =
+          row?.spender_account_id ||
+          row?.spender ||
+          row?.spender_id ||
+          row?.spender?.account_id ||
+          row?.spender?.id;
+
+        const spender = String(rawSpender || '').trim();
+        if (spender !== spenderIdStr) return;
+
+        const amtRaw = row?.amount;
+        const amt =
+          typeof amtRaw === 'string' ? Number(amtRaw) : Number(amtRaw || 0);
+
+        allowanceTiny += Math.max(0, Math.floor(amt));
+      });
+    } catch (err) {
+      console.error('Mirror Node allowance error:', err);
+    }
+
+    // ---------------------------------------------------------
+    // 5) final response
+    // ---------------------------------------------------------
+    const recipients = Object.entries(charges).map(([acct, amt]) => ({
+      accountId: acct,
+      amount: amt
+    }));
+
+    const ok = allowanceTiny >= requiredTiny;
+
+    res.json({
+      ok,
+      amount: totalCharge,
+      network: netName,
+      asset: tokenIdStr,
+      recipients,
+      allowanceTiny,
+      decimals,
+      requiredTiny
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' });
+  }
+});
+
 
 app.post('/x402/submit-transfer', async (req: Request, res: Response) => {
   try {
@@ -543,7 +719,7 @@ app.get('/marketplace/listings', async (req: Request, res: Response) => {
 
 app.post('/marketplace/listings', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().int().nonnegative(), pricePerUse: z.number().int().nonnegative() })
+    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().nonnegative(), pricePerUse: z.number().nonnegative() })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const kp = await db.getKnowledgePack(parsed.data.knowledgePackId)
@@ -573,7 +749,7 @@ app.get('/marketplace/listings/by-pack/:packId', async (req: Request, res: Respo
 
 app.post('/marketplace/listings/update', async (req: Request, res: Response) => {
   try {
-    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().int().nonnegative(), pricePerUse: z.number().int().nonnegative() })
+    const schema = z.object({ knowledgePackId: z.string(), ownerAccountId: z.string(), price: z.number().nonnegative(), pricePerUse: z.number().nonnegative() })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const listing = await db.getMarketplaceListingByPackId(parsed.data.knowledgePackId)

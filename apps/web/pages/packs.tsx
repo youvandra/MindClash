@@ -292,16 +292,16 @@ export default function Packs() {
               <div className="space-y-3">
                 <div className="font-semibold">List for Rent</div>
                 <label className="text-sm">Rent Price</label>
-                <input className="input" type="number" min={0} value={listPrice} onChange={e=> setListPrice(e.target.value)} />
+                <input className="input" type="number" min={0} step="any" value={listPrice} onChange={e=> setListPrice(e.target.value)} />
                 <label className="text-sm">Price Per Use</label>
-                <input className="input" type="number" min={0} value={listPriceUse} onChange={e=> setListPriceUse(e.target.value)} />
+                <input className="input" type="number" min={0} step="any" value={listPriceUse} onChange={e=> setListPriceUse(e.target.value)} />
                 <div className="flex gap-2 justify-end">
                   <button className="btn-outline" onClick={()=> { setModal(null); setListPrice(''); setListPriceUse('') }}>Cancel</button>
                   <button className="btn-primary" onClick={async ()=>{
                     try {
                       const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
-                      const priceNum = Math.max(0, parseInt(listPrice || '0', 10))
-                      const priceUseNum = Math.max(0, parseInt(listPriceUse || '0', 10))
+                      const priceNum = Math.max(0, parseFloat(listPrice || '0'))
+                      const priceUseNum = Math.max(0, parseFloat(listPriceUse || '0'))
                       const r = await createMarketplaceListing(String(modal.id), accId, priceNum, priceUseNum)
                       if (r && !r.error) {
                         setPacks(prev => prev.map(x => x.id === modal.id ? { ...x, listed: true } : x))
@@ -321,9 +321,9 @@ export default function Packs() {
               <div className="space-y-3">
                 <div className="font-semibold">Update Listing</div>
                 <label className="text-sm">Rent Price</label>
-                <input className="input" type="number" min={0} value={listPrice} onChange={e=> setListPrice(e.target.value)} />
+                <input className="input" type="number" min={0} step="any" value={listPrice} onChange={e=> setListPrice(e.target.value)} />
                 <label className="text-sm">Price Per Use</label>
-                <input className="input" type="number" min={0} value={listPriceUse} onChange={e=> setListPriceUse(e.target.value)} />
+                <input className="input" type="number" min={0} step="any" value={listPriceUse} onChange={e=> setListPriceUse(e.target.value)} />
                 <div className="flex items-center justify-between">
                   <div>
                     <button className="btn-danger" onClick={async ()=>{
@@ -345,8 +345,8 @@ export default function Packs() {
                     <button className="btn-primary" onClick={async ()=>{
                       try {
                         const accId = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
-                        const priceNum = Math.max(0, parseInt(listPrice || '0', 10))
-                        const priceUseNum = Math.max(0, parseInt(listPriceUse || '0', 10))
+                        const priceNum = Math.max(0, parseFloat(listPrice || '0'))
+                        const priceUseNum = Math.max(0, parseFloat(listPriceUse || '0'))
                         const r = await updateMarketplaceListing(String(modal.id), accId, priceNum, priceUseNum)
                         if (r && !r.error) {
                           setModal(null)
