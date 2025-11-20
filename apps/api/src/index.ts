@@ -251,6 +251,7 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
       const hedNet = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
       const netName = hedNet === 'mainnet' ? 'hedera-mainnet' : 'hedera-testnet'
       if (!facilitatorUrl || !payTo) return res.status(500).json({ error: 'Payment config missing' })
+      const recipients = Object.entries(charges).map(([acct, amt]) => ({ accountId: acct, amount: amt }))
       const requirement = {
         scheme: 'exact',
         network: netName,
@@ -259,10 +260,10 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
         description: 'Chat payment',
         mimeType: 'application/json',
         outputSchema: undefined,
-        payTo,
+        payTo: undefined,
         maxTimeoutSeconds: 120,
         asset: process.env.COK_TOKEN_ID,
-        extra: undefined
+        extra: { recipients }
       }
       const cw = await db.getCustodialWalletByAccountId(accountId)
       const privSrc = String(cw?.private_key || '')
@@ -281,7 +282,9 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
           const tokenId = HederaTokenId.fromString(tokenIdStr)
           const tx = new HederaTransferTransaction()
             .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -totalCharge)
-            .addTokenTransfer(tokenId, HederaAccountId.fromString(payTo), totalCharge)
+          for (const [acct, amt] of Object.entries(charges)) {
+            tx.addTokenTransfer(tokenId, HederaAccountId.fromString(acct), amt)
+          }
           tx.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(accountId)))
           tx.freezeWith(client)
           const hex = pk.startsWith('0x') ? pk.slice(2) : pk
@@ -323,12 +326,14 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
               const client2 = hedNet === 'mainnet' ? HederaClient.forMainnet() : HederaClient.forTestnet()
               const tokenIdStr2 = String(process.env.COK_TOKEN_ID || '')
               const tokenId2 = HederaTokenId.fromString(tokenIdStr2)
-              const spenderIdStr = String(process.env.ADDRESS || '')
-              const spenderKeyStr = String(process.env.COK_TREASURY_PRIVATE_KEY || '')
-              const tx2 = new HederaTransferTransaction()
-                .addApprovedTokenTransfer(tokenId2, HederaAccountId.fromString(accountId), -totalCharge)
-                .addTokenTransfer(tokenId2, HederaAccountId.fromString(spenderIdStr), totalCharge)
-              tx2.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(spenderIdStr)))
+            const spenderIdStr = String(process.env.ADDRESS || '')
+            const spenderKeyStr = String(process.env.COK_TREASURY_PRIVATE_KEY || '')
+            const tx2 = new HederaTransferTransaction()
+              .addApprovedTokenTransfer(tokenId2, HederaAccountId.fromString(accountId), -totalCharge)
+            for (const [acct, amt] of Object.entries(charges)) {
+              tx2.addTokenTransfer(tokenId2, HederaAccountId.fromString(acct), amt)
+            }
+            tx2.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(spenderIdStr)))
               tx2.freezeWith(client2)
               const hex2 = spenderKeyStr.startsWith('0x') ? spenderKeyStr.slice(2) : spenderKeyStr
               const key2 = HederaPrivateKey.fromStringECDSA(hex2)
@@ -356,7 +361,9 @@ app.post('/playground/chat', async (req: Request, res: Response) => {
               const spenderKeyStr = String(process.env.COK_TREASURY_PRIVATE_KEY || '')
               const tx2 = new HederaTransferTransaction()
                 .addApprovedTokenTransfer(tokenId2, HederaAccountId.fromString(accountId), -totalCharge)
-                .addTokenTransfer(tokenId2, HederaAccountId.fromString(spenderIdStr), totalCharge)
+              for (const [acct, amt] of Object.entries(charges)) {
+                tx2.addTokenTransfer(tokenId2, HederaAccountId.fromString(acct), amt)
+              }
               tx2.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(spenderIdStr)))
               tx2.freezeWith(client2)
               const hex2 = spenderKeyStr.startsWith('0x') ? spenderKeyStr.slice(2) : spenderKeyStr
@@ -443,35 +450,37 @@ app.post('/x402/prepare-transfer', async (req: Request, res: Response) => {
   try {
     const schema = z.object({ accountId: z.string(), listingIds: z.array(z.string()).default([]) })
     const parsed = schema.safeParse(req.body)
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
-    const { accountId, listingIds } = parsed.data
-    const facilitatorUrl = String(process.env.FACILITATOR_URL || '')
-    const payTo = String(process.env.ADDRESS || '')
-    const hedNet = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
-    const netName = hedNet === 'mainnet' ? 'hedera-mainnet' : 'hedera-testnet'
-    if (!facilitatorUrl || !payTo) return res.status(500).json({ error: 'Payment config missing' })
-    const charges: Record<string, number> = {}
-    for (const lid of (listingIds || [])) {
-      const listing = await db.getMarketplaceListing(lid)
-      if (!listing) continue
-      const owner = String(listing.owner_account_id)
-      const isOwner = owner === String(accountId)
-      const perUse = Math.max(0, Number((listing as any).price_per_use || 0))
-      if (!isOwner && perUse > 0) charges[owner] = (charges[owner] || 0) + perUse
-    }
-    const totalCharge = Object.values(charges).reduce((a, b) => a + b, 0)
-    if (totalCharge <= 0) return res.json({ ok: false, error: 'No payment required' })
-    const client = hedNet === 'mainnet' ? HederaClient.forMainnet() : HederaClient.forTestnet()
-    const tokenIdStr = String(process.env.COK_TOKEN_ID || '')
-    const tokenId = HederaTokenId.fromString(tokenIdStr)
-    const tx = new HederaTransferTransaction()
-      .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -totalCharge)
-      .addTokenTransfer(tokenId, HederaAccountId.fromString(payTo), totalCharge)
-    tx.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(accountId)))
-    tx.freezeWith(client)
-    const bytes = tx.toBytes()
-    const b64 = Buffer.from(bytes).toString('base64')
-    res.json({ bytes: b64, network: netName, payTo, amount: totalCharge, asset: tokenIdStr })
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+  const { accountId, listingIds } = parsed.data
+  const facilitatorUrl = String(process.env.FACILITATOR_URL || '')
+  const hedNet = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
+  const netName = hedNet === 'mainnet' ? 'hedera-mainnet' : 'hedera-testnet'
+  if (!facilitatorUrl) return res.status(500).json({ error: 'Payment config missing' })
+  const charges: Record<string, number> = {}
+  for (const lid of (listingIds || [])) {
+    const listing = await db.getMarketplaceListing(lid)
+    if (!listing) continue
+    const owner = String(listing.owner_account_id)
+    const isOwner = owner === String(accountId)
+    const perUse = Math.max(0, Number((listing as any).price_per_use || 0))
+    if (!isOwner && perUse > 0) charges[owner] = (charges[owner] || 0) + perUse
+  }
+  const totalCharge = Object.values(charges).reduce((a, b) => a + b, 0)
+  if (totalCharge <= 0) return res.json({ ok: false, error: 'No payment required' })
+  const client = hedNet === 'mainnet' ? HederaClient.forMainnet() : HederaClient.forTestnet()
+  const tokenIdStr = String(process.env.COK_TOKEN_ID || '')
+  const tokenId = HederaTokenId.fromString(tokenIdStr)
+  const tx = new HederaTransferTransaction()
+    .addTokenTransfer(tokenId, HederaAccountId.fromString(accountId), -totalCharge)
+  for (const [acct, amt] of Object.entries(charges)) {
+    tx.addTokenTransfer(tokenId, HederaAccountId.fromString(acct), amt)
+  }
+  tx.setTransactionId(HederaTransactionId.generate(HederaAccountId.fromString(accountId)))
+  tx.freezeWith(client)
+  const bytes = tx.toBytes()
+  const b64 = Buffer.from(bytes).toString('base64')
+  const recipients = Object.entries(charges).map(([acct, amt]) => ({ accountId: acct, amount: amt }))
+  res.json({ bytes: b64, network: netName, amount: totalCharge, asset: tokenIdStr, recipients })
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Server error' })
   }
@@ -507,10 +516,10 @@ app.post('/x402/submit-transfer', async (req: Request, res: Response) => {
       description: 'Chat payment',
       mimeType: 'application/json',
       outputSchema: undefined,
-      payTo,
+      payTo: undefined,
       maxTimeoutSeconds: 120,
-      asset: 'hbar',
-      extra: undefined
+      asset: String(process.env.COK_TOKEN_ID || ''),
+      extra: { recipients: Object.entries(charges).map(([acct, amt]) => ({ accountId: acct, amount: amt })) }
     }
     const paymentPayload = { network: netName, signedTransaction: signedBytes }
     const base = facilitatorUrl.endsWith('/') ? facilitatorUrl.slice(0, -1) : facilitatorUrl
