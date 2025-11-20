@@ -1101,6 +1101,19 @@ app.post('/marketplace/rent', async (req: Request, res: Response) => {
     // 9. SUCCESS → CREATE RENTAL
     // -------------------------------
     const rental = await db.createMarketplaceRental(listingId, renterAcct, mins)
+    try {
+      const hedNet = (process.env.HEDERA_NETWORK || process.env.NEXT_PUBLIC_HASHPACK_NETWORK || 'testnet').toLowerCase()
+      await db.createRentActivity({
+        renter_account_id: renterAcct,
+        owner_account_id: ownerAcct,
+        listing_id: listingId,
+        title: String((listing as any)?.title || ''),
+        minutes: mins,
+        total_amount: totalCharge,
+        transaction_ids: [],
+        network: hedNet
+      })
+    } catch {}
     return res.json(rental)
 
   } catch (err) {
@@ -1757,6 +1770,17 @@ app.get('/activities', async (req: Request, res: Response) => {
     const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined
     if (!accountId) return res.status(400).json({ error: 'Missing accountId' })
     const list = await db.listActivitiesByAccountId(accountId)
+    res.json(list)
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Server error' })
+  }
+})
+
+app.get('/rent-activities', async (req: Request, res: Response) => {
+  try {
+    const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined
+    if (!accountId) return res.status(400).json({ error: 'Missing accountId' })
+    const list = await db.listRentActivitiesByAccountId(accountId)
     res.json(list)
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'Server error' })
