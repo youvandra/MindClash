@@ -452,3 +452,9 @@ export async function isCustodialAccount(accountId: string) {
   })
   return r.json()
 }
+
+export async function listRentActivities(accountId: string) {
+  const url = `${API_URL}/rent-activities?accountId=${encodeURIComponent(accountId)}`
+  const r = await fetch(url)
+  return r.json()
+}

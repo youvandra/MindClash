@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listMarketplaceListings, getMarketplaceRentalStatus, rentMarketplace } from '../lib/api'
+import { listMarketplaceListings, getMarketplaceRentalStatus, rentMarketplace, listRentActivities } from '../lib/api'
 
 export default function Marketplace() {
   const [accountId, setAccountId] = useState('')
@@ -10,6 +10,9 @@ export default function Marketplace() {
   const [renting, setRenting] = useState(false)
   const [rentError, setRentError] = useState('')
   const [canUse, setCanUse] = useState<Record<string, boolean>>({})
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [rentHistory, setRentHistory] = useState<any[]>([])
+  const [rentHistoryLoading, setRentHistoryLoading] = useState(false)
   useEffect(() => {
     listMarketplaceListings().then(setListings).catch(()=>{})
   }, [])
@@ -79,7 +82,26 @@ export default function Marketplace() {
     <div className="page py-8 space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Marketplace</h2>
-        <input className="input max-w-sm" placeholder="Search title" value={query} onChange={e=>setQuery(e.target.value)} />
+        <div className="flex items-center gap-2">
+          <input className="input max-w-sm" placeholder="Search title" value={query} onChange={e=>setQuery(e.target.value)} />
+          <button className="btn-outline" onClick={async ()=>{
+            setHistoryOpen(true)
+            try {
+              setRentHistoryLoading(true)
+              const acc = typeof window !== 'undefined' ? (sessionStorage.getItem('accountId') || '') : ''
+              if (acc) {
+                const list = await listRentActivities(acc)
+                setRentHistory(Array.isArray(list) ? list : [])
+              } else {
+                setRentHistory([])
+              }
+            } catch {
+              setRentHistory([])
+            } finally {
+              setRentHistoryLoading(false)
+            }
+          }}>History</button>
+        </div>
       </div>
       <div className="grid grid-cols-1 gap-3">
         {listings.filter(l => !query || String(l.title||l.knowledge_pack_id||'').toLowerCase().includes(query.toLowerCase())).map(l => (
@@ -114,6 +136,44 @@ export default function Marketplace() {
               <button className="btn-outline" onClick={()=>{ setRentId(''); setMinutes(''); setRentError(''); setRenting(false) }}>Cancel</button>
               <button className={`btn-primary ${renting?'bg-gray-200 text-gray-500 cursor-not-allowed':''}`} disabled={renting} onClick={confirmRent}>Confirm Rent</button>
             </div>
+          </div>
+        </div>
+      )}
+      {historyOpen && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center" onClick={()=> setHistoryOpen(false)}>
+          <div className="card p-6 space-y-3 max-w-2xl w-full" onClick={e=> e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="text-lg font-semibold">Rent Activity History</div>
+              <button className="btn-ghost btn-sm" onClick={()=> setHistoryOpen(false)}>Close</button>
+            </div>
+            {rentHistoryLoading ? (
+              <div className="text-sm text-brand-brown/60">Loading…</div>
+            ) : rentHistory.length === 0 ? (
+              <div className="text-sm text-brand-brown/60">No rent activities</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table table-zebra w-full">
+                  <thead>
+                    <tr className="text-left">
+                      <th className="p-2">Title</th>
+                      <th className="p-2 w-24">Minutes</th>
+                      <th className="p-2 w-32">Amount</th>
+                      <th className="p-2 w-40">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rentHistory.map((r: any) => (
+                      <tr key={String(r.id)}>
+                        <td className="p-2 truncate max-w-xs" title={r.title || ''}>{r.title || '-'}</td>
+                        <td className="p-2 font-mono">{typeof r.minutes === 'number' ? r.minutes : '-'}</td>
+                        <td className="p-2 font-mono">{typeof r.total_amount === 'number' ? r.total_amount : '-'}</td>
+                        <td className="p-2 text-sm font-mono">{r.created_at ? (()=>{ const dt=new Date(r.created_at); const dd=String(dt.getDate()).padStart(2,'0'); const mm=String(dt.getMonth()+1).padStart(2,'0'); const yyyy=dt.getFullYear(); return `${dd}/${mm}/${yyyy}`; })() : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
