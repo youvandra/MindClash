@@ -187,8 +187,8 @@ export default function Home() {
       <div className="page">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
           <div className="space-y-6">
-            <h1 className="text-5xl md:text-6xl font-bold leading-tight">Navigating Ideas, Sharing Insights.</h1>
-            <p className="text-brand-brown">Unlock invaluable wisdom personalized for you in our agent debate arena. Dive into episodes designed to deliver relevant insights that cater to your interests and needs.</p>
+            <h1 className="text-5xl md:text-6xl font-bold leading-tight">The Vault of Human Intelligence</h1>
+            <p className="text-brand-brown">Unlock expert-powered knowledge modules, rent real human insights, and get AI responses shaped by verified specialists, not generic models. Every question is paid instantly on-chain, every insight is protected, and every expert earns from their intelligence. This is where knowledge is proven, rated, and transformed into a marketplace you can chat with.</p>
             <div className="flex gap-3">
               {connected ? (
                 <>

@@ -953,6 +953,7 @@ app.post('/marketplace/rent', async (req: Request, res: Response) => {
     }
 
     let paid = false
+    const txIds: string[] = []
 
     // -------------------------------
     // 5. TRY DIRECT TRANSFER
@@ -984,7 +985,10 @@ app.post('/marketplace/rent', async (req: Request, res: Response) => {
         const submit = await signed.execute(client)
         const receipt = await submit.getReceipt(client)
 
-        if (String(receipt.status) === 'SUCCESS') paid = true
+        if (String(receipt.status) === 'SUCCESS') {
+          paid = true
+          try { txIds.push(String((submit as any)?.transactionId || '')) } catch {}
+        }
       } catch (err) {
         console.error('Direct transfer failed:', err)
       }
@@ -1033,7 +1037,10 @@ app.post('/marketplace/rent', async (req: Request, res: Response) => {
           const txn = HederaTransaction.fromBytes(bytes)
           const result = await txn.execute(client)
           const receipt = await result.getReceipt(client)
-          if (String(receipt.status) === 'SUCCESS') paid = true
+          if (String(receipt.status) === 'SUCCESS') {
+            paid = true
+            try { txIds.push(String((result as any)?.transactionId || '')) } catch {}
+          }
         } catch (err) {
           console.error('X-PAY execute error:', err)
           return res.status(402).json({ error: 'Payment failed' })
@@ -1069,7 +1076,10 @@ app.post('/marketplace/rent', async (req: Request, res: Response) => {
         const submit2 = await signed2.execute(client)
         const rec2 = await submit2.getReceipt(client)
 
-        if (String(rec2.status) === 'SUCCESS') paid = true
+        if (String(rec2.status) === 'SUCCESS') {
+          paid = true
+          try { txIds.push(String((submit2 as any)?.transactionId || '')) } catch {}
+        }
       } catch (err) {
         console.error('approved fallback failed:', err)
       }
@@ -1110,7 +1120,7 @@ app.post('/marketplace/rent', async (req: Request, res: Response) => {
         title: String((listing as any)?.title || ''),
         minutes: mins,
         total_amount: totalCharge,
-        transaction_ids: [],
+        transaction_ids: txIds,
         network: hedNet
       })
     } catch {}

@@ -159,6 +159,7 @@ export default function Marketplace() {
                       <th className="p-2 w-24">Minutes</th>
                       <th className="p-2 w-32">Amount</th>
                       <th className="p-2 w-40">Date</th>
+                      <th className="p-2 w-56">Hashscan</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -168,6 +169,7 @@ export default function Marketplace() {
                         <td className="p-2 font-mono">{typeof r.minutes === 'number' ? r.minutes : '-'}</td>
                         <td className="p-2 font-mono">{typeof r.total_amount === 'number' ? r.total_amount : '-'}</td>
                         <td className="p-2 text-sm font-mono">{r.created_at ? (()=>{ const dt=new Date(r.created_at); const dd=String(dt.getDate()).padStart(2,'0'); const mm=String(dt.getMonth()+1).padStart(2,'0'); const yyyy=dt.getFullYear(); return `${dd}/${mm}/${yyyy}`; })() : '-'}</td>
+                        <td className="p-2 text-sm">{Array.isArray(r.transaction_ids) && r.transaction_ids.length > 0 ? (()=>{ const tx = String(r.transaction_ids[0] || ''); const net = String(r.network || '').includes('mainnet') ? 'mainnet' : 'testnet'; const url = `https://hashscan.io/${net}/transaction/${encodeURIComponent(tx)}`; const label = tx.length > 24 ? `${tx.slice(0, 12)}…${tx.slice(-8)}` : tx; return (<a className="link" href={url} target="_blank" rel="noreferrer">{label}</a>); })() : '-'}</td>
                       </tr>
                     ))}
                   </tbody>
